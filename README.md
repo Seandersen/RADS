@@ -41,8 +41,8 @@ To change the defaults, simply supply the corresponding options.
 # Output File Information
 RADS will generate eight output directories with various data, and one output text file in the original directory. Information on those directories and files can be found here.
 
-| File | Data Contained  |
-| ____ | _______________ |
+| File | Data Contained |
+| --- | --- |
 | genomes/ | genomic .fna files parsed from the input genomes directory supplied by -g |
 | genomestranslated/ | genomes translated into amino acid fasta (.faa) files by prodigal |
 | diamonddbs/ | Diamond blast databases generated from amino acid fasta files to be used to blast against |
@@ -51,4 +51,3 @@ RADS will generate eight output directories with various data, and one output te
 | EF_B0058_ORFs/ | list of ORF IDs and coordinates containing query (EFB0058 default) |
 | EF_B0058_flanks/ | files of flanks coordinates. Size defaults to 5000nt up- and down-stream. Can be changed by providing integers with options -u and -d |
 | bedfiles/ | bed files used by seqkit for contig extraction |
-| contigs/ | final nucleotide fasta files containing contigs surrounding the query |
