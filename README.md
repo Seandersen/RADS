@@ -9,7 +9,7 @@ RADS was developed by Shelby E Andersen in collaboration with Joshua M Kirsch, J
 ```{bash}
 conda create -n RADS
 conda install diamond
-git clone [link]
+git clone https://github.com/Seandersen/RADS.git
 ```
 
 # Quick Start
