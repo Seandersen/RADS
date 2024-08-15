@@ -8,10 +8,18 @@ RADS was developed by Shelby E Andersen in collaboration with Joshua M Kirsch, J
 
 ```{bash}
 conda create -n RADS
+
 conda activate RADS
-conda install diamond
+
+##If using a non-silicon chip Mac or another linux distribution
+conda install -c bioconda -c conda-forge diamond
+##If using an apple silicon chip Mac
+brew install diamond
+
 conda install seqkit
+
 conda install prodigal
+
 git clone https://github.com/Seandersen/RADS.git
 ```
 
