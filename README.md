@@ -8,6 +8,7 @@ RADS was developed by Shelby E Andersen in collaboration with Joshua M Kirsch, J
 
 ```{bash}
 conda create -n RADS
+conda activate RADS
 conda install diamond
 conda install seqkit
 conda install prodigal
@@ -16,6 +17,7 @@ git clone https://github.com/Seandersen/RADS.git
 
 If you wish to test RADS, test genomic information has been included in the download.
 ```{bash}
+## conda activate RADS
 ./RADS.sh -g testgenomes/ncbi_dataset/data
 ```
 
@@ -23,11 +25,13 @@ If you wish to test RADS, test genomic information has been included in the down
 Due to its original intended purpose, RADS will default with 5000 nucleotides up- and down-stream of the queried ORF. EFB0058.fa, included in the download, is the default query. 
 
 ```{bash}
+##conda activate RADS
 ./RADS.sh -u [upstream integer (optional, default = 5000)] -d [downstream integer(optional, default = 5000)] -q [fasta query file (optional, default = EFB0058.fa)] -g [path to directory containing directories with genome information. (Required. Often ncbi_dataset/data/)]
 ```
 
 For help in the command line...
 ```{bash}
+##conda activate RADS
 ./RADS.sh -h
 ```
 
