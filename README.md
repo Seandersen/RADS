@@ -18,6 +18,10 @@ brew install diamond
 
 conda install seqkit
 
+##If using a Mac
+brew install prodigal
+
+##If using another linux distribution
 conda install prodigal
 
 git clone https://github.com/Seandersen/RADS.git
