@@ -7,24 +7,38 @@ RADS was developed by Shelby E Andersen in collaboration with Joshua M Kirsch, J
 # Installation
 
 ```{bash}
+##Create and activate a conda environment for RADS
 conda create -n RADS
-
 conda activate RADS
 
+##Install diamond blast into the RADS conda environment
 ##If using a non-silicon chip Mac or another linux distribution
 conda install -c bioconda -c conda-forge diamond
 ##If using an apple silicon chip Mac
 brew install diamond
 
+##Install seqkit into the RADS conda environment
 conda install seqkit
 
+##Install prodigal into the RADS conda environment
 ##If using a Mac
 brew install prodigal
-
 ##If using another linux distribution
 conda install prodigal
 
+##Pull RADS from GitHub
 git clone https://github.com/Seandersen/RADS.git
+
+##Navigate into the RADS directory
+cd RADS/
+
+##Install interproscan into the RADS directory
+mkdir my_interproscan
+cd my_interproscan
+wget https://ftp.ebi.ac.uk/pub/software/unix/iprscan/5/5.69-101.0/interproscan-5.69-101.0-64-bit.tar.gz
+wget https://ftp.ebi.ac.uk/pub/software/unix/iprscan/5/5.69-101.0/interproscan-5.69-101.0-64-bit.tar.gz.md5
+tar -pxvzf interproscan-5.69-101.0-*-bit.tar.gz
+python3 setup.py -f interproscan.properties
 ```
 
 If you wish to test RADS, test genomic information has been included in the download.
