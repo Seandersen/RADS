@@ -1,3 +1,4 @@
+##Options setup
 upint=5000
 downint=5000
 query=EFB0058.fa
@@ -62,21 +63,22 @@ echo "downstream set to: $downint"
 echo "query set to: $query"
 echo "genomes path set to: $genomespath"
 
+##Parse genomes into genomes/ directory
 mkdir genomes/
 for i in $(ls $genomespath)
 do
 cat $genomespath/${i}/*.fna > genomes/${i}.fna
 done
 
+##ORF predict and translate genomes
 mkdir genomes_translated/
-
 for i in $(ls genomes/)
 do
 prodigal -i genomes/${i} -o genomes_translated/${i}prodigal.txt -a genomes_translated/${i}translated.faa
 done
 
+##make custom databases for blast
 mkdir diamonddbs/
-
 cd genomes_translated/
 for i in $(ls ./*.faa)
 do
@@ -84,6 +86,7 @@ diamond makedb --in ${i} --db ../diamonddbs/${i}.db --threads 30
 done
 cd ../
 
+##Blast for query against custom databases
 mkdir blast_results_30/
 cd diamonddbs/
 for i in $(ls ./)
@@ -92,8 +95,10 @@ diamond blastp -d ${i} --query ../$query --threads 40 --out ../blast_results_30/
 done
 cd ../
 
+##concatenate all blast results into a master file
 cat blast_results_30/*.txt > master.txt
 
+##extract information and parse data for downstream extraction
 while IFS=$'\t' read -r pattern filename; do
 	echo "Pattern:$pattern"
 	echo "Filename:$filename"
@@ -101,11 +106,11 @@ while IFS=$'\t' read -r pattern filename; do
 	seqkit grep -p $pattern $filepath >> EFB0058_contigs/parsed_$filename
 done < master.txt
 
+##Extract contigs of specified size from .fna files by locations determined from query locus coordinates
 mkdir EFB0058_ORFs/
 mkdir EFB0058_flanks/
 mkdir bedfiles/
 mkdir contigs/
-
 for i in $(ls genomes/)
 do
 echo ${i}
@@ -125,3 +130,7 @@ seqkit subseq --bed bedfiles/${i}.bed genomes/${i} > contigs/${i}_EFB0058_contig
 echo “Contigs created for ${i} with flanks $upint up and $downint down”
 done
 
+##Translate all RADS contigs and peform domain prediction with interproscan (interproscan must be installed into the RADS directory)
+cat contigs/*.fna > allcontigsconcatenated.fna
+prodigal -i allcontigsconcatenated.fna -o allcontigsconcatenated.txt -a allcontigsconcatenated.faa
+./my_interproscan/interproscan-5.65-97.0/interproscan.sh -i allcontigsconcatenated.faa
