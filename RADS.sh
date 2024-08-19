@@ -1,10 +1,10 @@
-##Options setup
 upint=5000
 downint=5000
 query=EFB0058.fa
 genomespath=""
+samplename=""
 
-while getopts ":u:d:q:g:h" opt; do
+while getopts ":u:d:q:g:n:h" opt; do
 	case $opt in
 		u)
 			upint="$OPTARG"
@@ -18,7 +18,7 @@ while getopts ":u:d:q:g:h" opt; do
 		g)
 			genomespath="$OPTARG"
 			;;
-		h)	echo "usage:  ./RADS.sh -u [upstream integer (optional, default = 5000)] -d [downstream integer(optional, default = 5000)] -q [fasta query file (optional, default = EFB0058.fa)] -g [path to directory containing directories with genome information. (Required. Often ncbi_dataset/data/)]"
+		h)	echo "usage:  ./RADS.sh -u [upstream integer (optional, default = 5000)] -d [downstream integer(optional, default = 5000)] -q [fasta query file (optional, default = EFB0058.fa)] -g [path to directory containing directories with genome information. (Required. Often ncbi_dataset/data/)] -n [sample name to appended to all file and directory names. (Optional)]"
 			echo ""
 			echo "[REQUIRED OPTIONS]"
 			echo "-------------------------------------------------------------"
@@ -30,13 +30,19 @@ while getopts ":u:d:q:g:h" opt; do
 			echo "-d	integer for number of nucleotides downstream of ORF to extract. Default=5000 if not specified"
 			echo "-q	amino acid fasta (.faa/.fa) file for ORF(s) to use as query. Default=EFB0058.fa if not specified"
 			echo "-h	print help message and exit"
+			echo "-n	sample name to be added to all output files and directories"
 			exit 1
 			;;
-		\?) 
+		n)
+			if [ -n "$OPTARG" ]; then  # Check if an argument was provided to -n
+                                samplename="$OPTARG"
+                        fi
+                        ;;
+		\?)
 			echo "option -$OPTARG requires an argument. Usage: bash ./RADS.sh -u [upstream integer (optional, default = 5000)] -d [downstream integer(optional, default = 5000)] -q [fasta query file (optional, default = EFB0058.fa)] -g [path to directory containing directories with genome information. Often ncbi_dataset/data/)" >&2
 			exit 1
 			;;
-		:) 
+		:)
 			echo "option -$OPTARG requires an argument. Usage: bash ./RADS.sh -u [upstream integer (optional, default = 5000)] -d [downstream integer(optional, default = 5000)] -q [fasta query file (optional, default = EFB0058.fa)] -g [path to directory containing directories with genome information. Often ncbi_dataset/data/)" >&2
 			exit 1
 			;;
@@ -62,75 +68,72 @@ echo "upstream set to: $upint"
 echo "downstream set to: $downint"
 echo "query set to: $query"
 echo "genomes path set to: $genomespath"
+echo "sample name set to: $samplename"
 
-##Parse genomes into genomes/ directory
-mkdir genomes/
+mkdir genomes_${samplename}/
 for i in $(ls $genomespath)
 do
-cat $genomespath/${i}/*.fna > genomes/${i}.fna
+cat $genomespath/${i}/*.fna > genomes_${samplename}/${i}.fna
 done
 
-##ORF predict and translate genomes
-mkdir genomes_translated/
-for i in $(ls genomes/)
+mkdir genomes_translated_${samplename}/
+
+for i in $(ls genomes_$samplename/)
 do
-prodigal -i genomes/${i} -o genomes_translated/${i}prodigal.txt -a genomes_translated/${i}translated.faa
+prodigal -i genomes_$samplename/${i} -o genomes_translated_${samplename}/${i}prodigal.txt -a genomes_translated_${samplename}/${i}translated.faa
 done
 
-##make custom databases for blast
-mkdir diamonddbs/
-cd genomes_translated/
+mkdir diamonddbs_${samplename}/
+
+cd genomes_translated_${samplename}/
 for i in $(ls ./*.faa)
 do
-diamond makedb --in ${i} --db ../diamonddbs/${i}.db --threads 30
+diamond makedb --in ${i} --db ../diamonddbs_${samplename}/${i}.db --threads 30
 done
 cd ../
 
-##Blast for query against custom databases
-mkdir blast_results_30/
-cd diamonddbs/
+mkdir blast_results_30_${samplename}/
+cd diamonddbs_${samplename}/
 for i in $(ls ./)
 do
-diamond blastp -d ${i} --query ../$query --threads 40 --out ../blast_results_30/EFB0058_blast_${i}.txt --outfmt 6 qseqid sseqid length nident --max-target-seqs 0 --id 30
+diamond blastp -d ${i} --query ../$query --threads 40 --out ../blast_results_30_$samplename/EFB0058_blast_${i}.txt --outfmt 6 qseqid sseqid length nident --max-target-seqs 0 --id 30
 done
 cd ../
 
-##concatenate all blast results into a master file
-cat blast_results_30/*.txt > master.txt
+cat blast_results_30_${samplename}/*.txt > master$samplename.txt
 
-##extract information and parse data for downstream extraction
 while IFS=$'\t' read -r pattern filename; do
 	echo "Pattern:$pattern"
 	echo "Filename:$filename"
 	filepath="genomes/$filename"
 	seqkit grep -p $pattern $filepath >> EFB0058_contigs/parsed_$filename
-done < master.txt
+done < master$samplename.txt
 
-##Extract contigs of specified size from .fna files by locations determined from query locus coordinates
-mkdir EFB0058_ORFs/
-mkdir EFB0058_flanks/
-mkdir bedfiles/
-mkdir contigs/
-for i in $(ls genomes/)
+mkdir EFB0058_ORFs_$samplename/
+mkdir EFB0058_flanks_$samplename/
+mkdir bedfiles_$samplename/
+mkdir contigs_$samplename/
+
+for i in $(ls genomes_$samplename/)
 do
 echo ${i}
-cut -f2 blast_results_30/EFB0058_blast_${i}translated.faa.db.dmnd.txt > EFB0058_ORFS/${i}_EFB0058_ORFs.txt
+cut -f2 blast_results_30_$samplename/EFB0058_blast_${i}translated.faa.db.dmnd.txt > EFB0058_ORFS_$samplename/${i}_EFB0058_ORFs.txt
 echo “ORF IDs extracted”
-seqkit grep -f EFB0058_ORFS/${i}_EFB0058_ORFs.txt genomes_translated/${i}translated.faa | seqkit seq -n > EFB0058_ORFS/${i}_EFB0058_hits_coordinates.txt
+seqkit grep -f EFB0058_ORFS_$samplename/${i}_EFB0058_ORFs.txt genomes_translated_$samplename/${i}translated.faa | seqkit seq -n > EFB0058_ORFS_$samplename/${i}_EFB0058_hits_coordinates.txt
 echo “Coordinates extracted”
-awk 'BEGIN{OFS="\t"} {F="#"} {up=$3; down=$5; if (up>down) print down, up; else print up, down}' EFB0058_ORFS/${i}_EFB0058_hits_coordinates.txt > EFB0058_flanks/${i}_EFB0058hits_flanks.txt
-##to change the size of the output contig, change the line of code below for subracting from up and adding to down.
-awk 'BEGIN{OFS="\t"} {up=$1-$upint; down=$2+$downint; if (up>0) print up, down; else print 0, down}' EFB0058_flanks/${i}_EFB0058hits_flanks.txt > EFB0058_flanks/${i}_EFB0058hits_flanks_forbed.txt
+awk 'BEGIN{OFS="\t"} {F="#"} {up=$3; down=$5; if (up>down) print down, up; else print up, down}' EFB0058_ORFS_$samplename/${i}_EFB0058_hits_coordinates.txt > EFB0058_flanks_$samplename/${i}_EFB0058hits_flanks.txt
+awk 'BEGIN{OFS="\t"} {up=$1-$upint; down=$2+$downint; if (up>0) print up, down; else print 0, down}' EFB0058_flanks_$samplename/${i}_EFB0058hits_flanks.txt > EFB0058_flanks_$samplename/${i}_EFB0058hits_flanks_forbed.txt
 echo “coordinates formatted”
-cut -f 2 blast_results_30/EFB0058_blast_${i}translated.faa.db.dmnd.txt | cut -f 1 -d "_" > EFB0058_flanks/${i}_EFB0058_contigs.txt
+cut -f 2 blast_results_30_$samplename/EFB0058_blast_${i}translated.faa.db.dmnd.txt | cut -f 1 -d "_" > EFB0058_flanks_$samplename/${i}_EFB0058_contigs.txt
 echo “Contig names extracted”
-paste EFB0058_flanks/${i}_EFB0058_contigs.txt EFB0058_flanks/${i}_EFB0058hits_flanks_forbed.txt > bedfiles/${i}.bed
+paste EFB0058_flanks_$samplename/${i}_EFB0058_contigs.txt EFB0058_flanks_$samplename/${i}_EFB0058hits_flanks_forbed.txt > bedfiles_$samplename/${i}.bed
 echo “bed file created”
-seqkit subseq --bed bedfiles/${i}.bed genomes/${i} > contigs/${i}_EFB0058_contigs.fna
+seqkit subseq --bed bedfiles_$samplename/${i}.bed genomes_$samplename/${i} > contigs_$samplename/${i}_EFB0058_contigs.fna
 echo “Contigs created for ${i} with flanks $upint up and $downint down”
 done
 
 ##Translate all RADS contigs and peform domain prediction with interproscan (interproscan must be installed into the RADS directory)
-cat contigs/*.fna > allcontigsconcatenated.fna
-prodigal -i allcontigsconcatenated.fna -o allcontigsconcatenated.txt -a allcontigsconcatenated.faa
-./my_interproscan/interproscan-5.65-97.0/interproscan.sh -i allcontigsconcatenated.faa
+cat contigs_$samplename/*.fna > allcontigsconcatenated_$samplename.fna
+prodigal -i allcontigsconcatenated_$samplename.fna -o allcontigsconcatenated_$samplename.txt -a allcontigsconcatenated_$samplename.faa
+sed 's/*//g' allcontigsconcatenated_$samplename.faa > interposcaninput_$samplename.faa
+./my_interproscan/interproscan-5.69-101.0/interproscan.sh -i interposcaninput_$samplename.faa
