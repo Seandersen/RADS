@@ -52,7 +52,7 @@ Due to its original intended purpose, RADS will default with 5000 nucleotides up
 
 ```{bash}
 ##conda activate RADS
-./RADS.sh -u [upstream integer (optional, default = 5000)] -d [downstream integer(optional, default = 5000)] -q [fasta query file (optional, default = EFB0058.fa)] -g [path to directory containing directories with genome information. (Required. Often ncbi_dataset/data/)]
+./RADS.sh -u [upstream integer (optional, default = 5000)] -d [downstream integer(optional, default = 5000)] -q [fasta query file (optional, default = EFB0058.fa)] -g [path to directory containing directories with genome information. (Required. Often ncbi_dataset/data/)] -n [sample name to append to all file and directory names (Optional)]
 ```
 
 For help in the command line...
@@ -66,6 +66,7 @@ To change the defaults, simply supply the corresponding options.
 -u	integer for number of nucleotides upstream of ORF to extract. Default=5000 if not specified
 -d	integer for number of nucleotides downstream of ORF to extract. Default=5000 if not specified
 -q	amino acid fasta (.faa/.fa) file for ORF(s) to use as query. Default=EFB0058.fa if not specified
+-n  sample name to be added to all output files and directories
 ```
 
 # Output File Information
@@ -81,3 +82,8 @@ RADS will generate eight output directories with various data, and one output te
 | EF_B0058_ORFs/ | list of ORF IDs and coordinates containing query (EFB0058 default) |
 | EF_B0058_flanks/ | files of flanks coordinates. Size defaults to 5000nt up- and down-stream. Can be changed by providing integers with options -u and -d |
 | bedfiles/ | bed files used by seqkit for contig extraction |
+| allcontigsconcatenated_.fna | all RADS output contigs as nucleic acids in a single .fna file |
+| allcontigsconcatenated_.txt | all RADS output contigs' ORF coordinates |
+| allcontigsconcatenated_.faa | all RADS output contigs translated to protein sequences |
+|interproscaninput_.faa | allcontigsconcatenated_.faa without * for use by interproscan |
+| interproscaninut_.txt | output of interproscan - all available domain data for proteins in RADS contigs |
