@@ -38,6 +38,9 @@ cd my_interproscan
 wget https://ftp.ebi.ac.uk/pub/software/unix/iprscan/5/5.69-101.0/interproscan-5.69-101.0-64-bit.tar.gz
 wget https://ftp.ebi.ac.uk/pub/software/unix/iprscan/5/5.69-101.0/interproscan-5.69-101.0-64-bit.tar.gz.md5
 tar -pxvzf interproscan-5.69-101.0-*-bit.tar.gz
+##If errors with "Cannot utime: operation not permitted", run:
+#sudo tar -pxvzf interproscan-5.69-101.0-*-bit.tar.gz
+
 python3 setup.py -f interproscan.properties
 ```
 
