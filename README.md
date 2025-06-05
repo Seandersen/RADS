@@ -72,6 +72,8 @@ To change the defaults, simply supply the corresponding options.
 -n  sample name to be added to all output files and directories
 ```
 
+If you want to run the categorization performed in [pub link], utilize the RMarkdown file RADSCat.rmd
+
 # Output File Information
 RADS will generate eight output directories with various data, and one output text file in the original directory. Information on those directories and files can be found here.
 
