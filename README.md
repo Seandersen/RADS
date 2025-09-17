@@ -92,3 +92,9 @@ RADS will generate eight output directories with various data, and one output te
 | allcontigsconcatenated_.faa | all RADS output contigs translated to protein sequences |
 |interproscaninput_.faa | allcontigsconcatenated_.faa without * for use by interproscan |
 | interproscaninut_.txt | output of interproscan - all available domain data for proteins in RADS contigs |
+
+# Common Issues and How to Fix Them
+| Issue | Solution |
+| --- | --- |
+| Running frozen during BLASTing | Cancel your run with ctrl + c, comment out chunks before the BLAST process (lines X-XX) (to avoid the laborious re-translating genomes step), re-start your run with the same sample name/query/etc. RADS was built to avoid re-BLASTing files that have already been completed |
+
