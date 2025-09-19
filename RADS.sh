@@ -75,6 +75,7 @@ for i in $(ls $genomespath)
 do
 cat $genomespath/${i} > genomes_${samplename}/${i}.fna
 done
+echo "genomes located"
 
 mkdir genomes_translated_${samplename}/
 cd genomes_${samplename}/
@@ -84,17 +85,20 @@ do
 prodigal -p meta  -i ${i} -o ../genomes_translated_${samplename}/${i}prodigal.txt -a ../genomes_translated_${samplename}/${i}translated.faa
 done
 cd ../
+echo "genomes translated"
 
 mkdir diamonddbs_${samplename}/
 
 cd genomes_translated_${samplename}/
 files=( ./*.faa )
 for i in "${files[@]}"
-diamond makedb --in ../00_QuerySequences/firmicutes_genomes_orfs_translations.faa --db diamonddbs_${samplename}/firmicutes_genomes_translated.db --threads 30
-
+do
+diamond makedb --in ${i} --db ../diamonddbs_${samplename}/${i}.db --threads 30
+done
+cd ../
 
 mkdir blast_results_30_${samplename}/
-cd diamonddbs_${samplename}/
+cd diamonddbs_${samplename}
 files=( *.dmnd )
 for i in "${files[@]}"
 do
@@ -109,7 +113,7 @@ do
 cat blast_results_30_${samplename}/${i} >> master$samplename.txt
 done
 
-mkdir EFB0058_ORFs_$samplename/
+mkdir EFB0058_ORFS_$samplename/
 mkdir EFB0058_flanks_$samplename/
 mkdir bedfiles_$samplename/
 mkdir contigs_$samplename/
@@ -128,7 +132,7 @@ do
     awk 'BEGIN{OFS="\t"} {F="#"} {up=$3; down=$5; if (up>down) print down, up; else print up, down}' EFB0058_ORFS_$samplename/${i}_EFB0058_hits_coordinates.txt > EFB0058_formatted_coordinates_$samplename/${i}_EFB0058_formatted_coordinates.txt
     awk -v upint=$upint -v downint=$downint 'BEGIN{OFS="\t"} {up=$1-upint; down=$2+downint; if (up>0) print up, down; else print 0, down}' EFB0058_formatted_coordinates_$samplename/${i}_EFB0058_formatted_coordinates.txt > EFB0058_final_coordinates_$samplename/${i}_EFB0058_final_coordinates.txt
     echo "Coordinates formatted"
-    cut -f 2 blast_results_30_$samplename/EFB0058_blast_${i}translated.faa.db.dmnd.txt | cut -f 1,2 -d "_" > EFB0058_flanks_$samplename/${i}_EFB0058_contigs.txt
+    cut -f 2 blast_results_30_$samplename/EFB0058_blast_${i}translated.faa.db.dmnd.txt | cut -f 1 -d "_" > EFB0058_flanks_$samplename/${i}_EFB0058_contigs.txt
     echo "Contig names extracted"
     paste EFB0058_flanks_$samplename/${i}_EFB0058_contigs.txt EFB0058_final_coordinates_$samplename/${i}_EFB0058_final_coordinates.txt > bedfiles_$samplename/${i}.bed
     echo "Bed file created"
@@ -152,48 +156,80 @@ sed 's/*//g' allcontigsconcatenated_$samplename.faa > interposcaninput_$samplena
 bash my_interproscan/interproscan-*/interproscan.sh -i interposcaninput_$samplename.faa
 
 
-##Generate a list of ORFs that are likely co-transcribed with query ORF
-#Pull ORF ID, start, stop, and strand for 0058 homologues
-for i in $(ls genomes_$samplename/)
-do
-awk 'BEGIN{OFS="\t"} {F="#"} {ORF=$1; start=$3; stop=$5; strand=$7; print ORF, start, stop, strand}' EFB0058_ORFS_$samplename/${i}_EFB0058_hits_coordinates.txt > EF0058_ORFS_$samplename/${i}_EFB0058_hits_coordinatesandstrand.txt
+## Generate a list of ORFs that are likely co-transcribed with query ORF
+# Pull ORF ID, start, stop, and strand for 0058 homologues
+for i in $(ls genomes_$samplename/); do
+    awk 'BEGIN{OFS="\t"; FS="#"} {ORF=$1; start=$3; stop=$5; strand=$7; print ORF, start, stop, strand}' \
+        EFB0058_ORFS_$samplename/${i}_EFB0058_hits_coordinates.txt \
+        > EFB0058_ORFS_$samplename/${i}_EFB0058_hits_coordinatesandstrand.txt
 done
+echo "Query Homolog ORFs, coordinates, and strand extracted"
 
-#Re-blast to get correct full query ID
-diamond makedb --in allcontigsconcatenated_$samplename.faa --db diamonddbs_${samplename}/allcontigsconcatenated_$samplename.db --threads 30
-diamond blastp -d diamonddbs_${samplename}/allcontigsconcatenated_$samplename.db --query $query --threads 40 --out fulllengthqueryORFS.txt --outfmt 6 qseqid sseqid length nident --max-target-seq 0 --id 30
+# Re-blast to get correct full query ID
+diamond makedb --in allcontigsconcatenated_$samplename.faa \
+               --db diamonddbs_${samplename}/allcontigsconcatenated_$samplename.db \
+               --threads 30
+diamond blastp -d diamonddbs_${samplename}/allcontigsconcatenated_$samplename.db \
+               --query $query --threads 40 \
+               --out fulllengthqueryORFS.txt \
+               --outfmt 6 qseqid sseqid length nident --id 95
 
-mkdir EFB0058_cotxORFS_$samplename/
+mkdir -p EFB0058_cotxORFS_$samplename/
 
 cut -f 2 fulllengthqueryORFS.txt > query_ORFS_long.txt
-seqkit grep -f query_ORFS_long.txt allcontigsconcatenated_$samplename.faa | seqkit seq -n > EFB0058_ORFS_$samplename/EFB0058_hits_coordinatesfull.txt
-awk 'BEGIN{OFS="\t"} {F="#"} {ORF=$1; start=$3; stop=$5; strand=$7; print ORF, start, stop, strand}' EFB0058_ORFS_$samplename/EFB0058_hits_coordinatesfull.txt > EFB0058_hits_coordinatesandstrand.txt
+seqkit grep -f query_ORFS_long.txt allcontigsconcatenated_$samplename.faa \
+    | seqkit seq -n \
+    > EFB0058_ORFS_$samplename/EFB0058_hits_coordinatesfull.txt
 
-##generate up/downstream orf number determined by strand for 0058 homologue
+awk 'BEGIN{OFS="\t"; FS="#"} {ORF=$1; start=$2; stop=$3; strand=$4; print ORF, start, stop, strand}' \
+    EFB0058_ORFS_$samplename/EFB0058_hits_coordinatesfull.txt \
+    > EFB0058_hits_coordinatesandstrand.txt
+
+## Generate up/downstream ORF number determined by strand
+mkdir EFB0058_cotxORFS_${samplename}
+
 while IFS= read -r line; do
+    ORF=$(echo $line | awk 'BEGIN{OFS="\t"} {print $1}')
+    strand=$(echo $line | awk 'BEGIN{OFS="\t"} {F=" "} {print $4}')
+    echo "ORF:$ORF  Strand:$strand"
 
-	ORF=$(echo $line | awk 'BEGIN{OFS="\t"} {F=" "} {print $1}')
-        strand=$(echo $line | awk 'BEGIN{OFS="\t"} {F=" "} {print $4}')
+    prefix=$(echo $ORF | sed 's/:\..*//')                                       # part before first :
+    number=$(echo $ORF | sed -E 's/.*_([0-9]+)$/\1/')     # extract trailing number
+    echo "prefix:$prefix    number:$number"
 
-        prefix=$(echo $ORF | sed 's/:\..*//')
-        number=$(echo $ORF | sed 's/*:\.._//')
+    if (( $strand > 0 )); then
+        new_number=$((number + 1))
+    elif (( $strand < 0 )); then
+        new_number=$((number - 1))
+    else
+        continue
+    fi
 
-	if ((strand>0)); then
-               	new_number=$((number + 1))
-       	elif ((strand<0)); then
-               	new_number=$((number -1))
-       	fi
+    downstreamORF="${prefix}:._${new_number}"
+    echo "$downstreamORF" >> EFB0058_cotxORFS_${samplename}/all_downstreamORFs.txt
+done < EFB0058_hits_coordinatesandstrand.txt
 
-	downstreamORF=${prefix}:.__${new_number}
-	print downstreamORF >> EFB0058_cotxORFS_$samplename/${i}_EFB0058_downstreamORFs.txt
-done < fulllengthqueryORFS.txt
+## Check whether the downstream ORF is on the same strand and starts within 100bp of query
+mkdir -p EFB0058_cotxORFS_$samplename/finallists/
 
-##check whether the downstream ORF is on the same strand and starts within 100bp of query
-mkdir EFB0058_cotxORFS_$samplename/finallists/
-for i in $(ls genomes_$samplename)
-do
-seqkit grep -f EFB0058_cotxORFS_$samplename/${i}_EFB0058_downstreamORFs.txt genomes_translated_$samplename/${i}translated.faa | seqkit seq -n > EFB0058_cotxORFS_$samplename/${i}_EFB0058_downstreamORFs_fullheader.txt
-awk'BEGIN{OFS="\t"} {F="#"} {ORF=$1; start=$3; stop=$5; strand=$7; print ORF, start, stop, strand}' EFB0058_cotxORFS_$samplename/${i}_EFB0058_downstreamORFs_fullheader.txt > EFB0058_cotxORFS_$samplename/${i}_EFB0058_downstreamORFs_coordinates.txt
-paste EFB0058_ORFS_$samplename/${i}_EFB0058_hits_coordinatesandstrand.txt EFB0058_cotxORFS_$samplename/${i}_EFB0058_downstreamORFs_coordinates.txt > EFB0058_cotxORFS_$samplename/${i}_EFB0058anddownstream.txt
-awk'BEGIN{OFS="\t"} {EFB0058ORF=$1; EFB0058stop=$3; EFB0058strand=$4; downstreamORF=$5; downstreamstart=$6; downstreamstrand=$8; if ((EFB0058strand==downstreamstrand) && (($3-$6) <=100) && (($3-$6)>=-100)) print downstreamORF}' EFB0058_cotxORFS_$samplename/${i}_EFB0058anddownstream.txt > EFB0058_cotxORFS/finallists/${i}_EFB0058_cotxORFs.txt
+for i in $(ls genomes_$samplename); do
+    seqkit grep -f EFB0058_cotxORFS_${samplename}/all_downstreamORFs.txt allcontigsconcatenated_$samplename.faa \
+        | seqkit seq -n \
+        > EFB0058_cotxORFS_$samplename/${i}_EFB0058_downstreamORFs_fullheader.txt
+
+    awk 'BEGIN{OFS="\t"; FS="#"} {ORF=$1; start=$2; stop=$3; strand=$4; print ORF, start, stop, strand}' \
+        EFB0058_cotxORFS_$samplename/${i}_EFB0058_downstreamORFs_fullheader.txt \
+        > EFB0058_cotxORFS_$samplename/${i}_EFB0058_downstreamORFs_coordinates.txt
+
+    paste EFB0058_hits_coordinatesandstrand.txt \
+          EFB0058_cotxORFS_$samplename/${i}_EFB0058_downstreamORFs_coordinates.txt \
+        > EFB0058_cotxORFS_$samplename/${i}_EFB0058anddownstream.txt
+
+    awk 'BEGIN{OFS="\t"} {
+             EFB0058ORF=$1; EFB0058stop=$3; EFB0058strand=$4;
+             downstreamORF=$5; downstreamstart=$6; downstreamstrand=$8;
+             if ((EFB0058strand==downstreamstrand) && (($3-$6) <=100) && (($3-$6)>=-100))
+                 print downstreamORF
+         }' EFB0058_cotxORFS_$samplename/${i}_EFB0058anddownstream.txt \
+        > EFB0058_cotxORFS_$samplename/finallists/${i}_EFB0058_cotxORFs.txt
 done
