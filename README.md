@@ -79,19 +79,22 @@ RADS will generate eight output directories with various data, and one output te
 
 | File | Data Contained |
 | --- | --- |
-| genomes/ | genomic .fna files parsed from the input genomes directory supplied by -g |
-| genomestranslated/ | genomes translated into amino acid fasta (.faa) files by prodigal |
-| diamonddbs/ | Diamond blast databases generated from amino acid fasta files to be used to blast against |
-| blast_results_30 | 30% amino acid identity hits of query supplied by -q or EF_B0058 (default) |
-| master.txt | list of all blast results concatenated from all genomes |
-| EF_B0058_ORFs/ | list of ORF IDs and coordinates containing query (EFB0058 default) |
-| EF_B0058_flanks/ | files of flanks coordinates. Size defaults to 5000nt up- and down-stream. Can be changed by providing integers with options -u and -d |
-| bedfiles/ | bed files used by seqkit for contig extraction |
-| allcontigsconcatenated_.fna | all RADS output contigs as nucleic acids in a single .fna file |
-| allcontigsconcatenated_.txt | all RADS output contigs' ORF coordinates |
-| allcontigsconcatenated_.faa | all RADS output contigs translated to protein sequences |
-|interproscaninput_.faa | allcontigsconcatenated_.faa without * for use by interproscan |
-| interproscaninut_.txt | output of interproscan - all available domain data for proteins in RADS contigs |
+| genomes_${samplename}/ | genomic .fna files parsed from the input genomes directory supplied by -g |
+| genomes_translated_${samplename}/ | genomes translated into amino acid fasta (.faa) files by prodigal |
+| diamonddbs_${samplename}/ | Diamond blast databases generated from amino acid fasta files to be used to blast against |
+| blast_results_30_${samplename} | 30% amino acid identity hits of query supplied by -q or EF_B0058 (default) |
+| master${samplename}.txt | list of all blast results concatenated from all genomes |
+| EFB0058_ORFs_${samplename}/ | list of ORF IDs and coordinates containing query (EFB0058 default) |
+| EFB0058_flanks_${samplename}/ | files of flanks coordinates. Size defaults to 5000nt up- and down-stream. Can be changed by providing integers with options -u and -d |
+| bedfiles_${samplename}/ | bed files used by seqkit for contig extraction |
+| allcontigsconcatenated_${samplename}.fna | all RADS output contigs as nucleic acids in a single .fna file |
+| allcontigsconcatenated_${samplename}.txt | all RADS output contigs' ORF coordinates |
+| allcontigsconcatenated_${samplename}.faa | all RADS output contigs translated to protein sequences |
+|interproscaninput_${samplename}.faa | allcontigsconcatenated_.faa without * for use by interproscan |
+| interproscaninut_${samplename}.txt | output of interproscan - all available domain data for proteins in RADS contigs |
+| fulllengthqueryORFS.txt | query ORFs with the flank coordinates in the IDs |
+| EFB0058_cotxORFS_${samplename}/ | contains file manipulations of obtaining ORFs downstream of query |
+| EFB0058_cotxORFS_$samplename/finallists/ | contains list of likely cotranscribed ORFs for each input genome |
 
 # Common Issues and How to Fix Them
 | Issue | Solution |
