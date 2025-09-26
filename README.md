@@ -72,7 +72,7 @@ To change the defaults, simply supply the corresponding options.
 -n  sample name to be added to all output files and directories
 ```
 
-If you want to run the categorization performed in [pub link], utilize the RMarkdown file RADSCat.rmd
+If you want to run the binomial analysis performed in [pub link], utilize the RMarkdown file RADS.rmd
 
 # Output File Information
 RADS will generate eight output directories with various data, and one output text file in the original directory. Information on those directories and files can be found here.
@@ -99,5 +99,5 @@ RADS will generate eight output directories with various data, and one output te
 # Common Issues and How to Fix Them
 | Issue | Solution |
 | --- | --- |
-| Running frozen during BLASTing | Cancel your run with ctrl + c, comment out chunks before the BLAST process (lines X-XX) (to avoid the laborious re-translating genomes step), re-start your run with the same sample name/query/etc. RADS was built to avoid re-BLASTing files that have already been completed |
+| Running frozen during BLASTing | This is typically caused by running out of RAM due to a large number of files being searched. Cancel your run with ctrl + c, Run again isolating steps of the pipeline using -s starting with [-s blast] or [-s 4]. RADS is incorporated with an argument that ensures completed files will be ignored.|
 
