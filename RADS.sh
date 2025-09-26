@@ -1,3 +1,5 @@
+#!/bin/sh
+
 mvgenomes( ) {
     mkdir genomes_${samplename}/
     for i in $(ls $genomespath)
