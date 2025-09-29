@@ -66,12 +66,12 @@ For help in the command line...
 
 To change the defaults, simply supply the corresponding options.
 ```{bash}
--h|--help		  print help message and exit
--u|--upint	  integer for number of nucleotides upstream of ORF to extract. Default=5000 if not specified
--d|--downint	integer for number of nucleotides downstream of ORF to extract. Default=5000 if not specified
--q|--query	  amino acid fasta (.faa/.fa) file for ORF(s) to use as query. Default=EFB0058.fa if not specified
--n|--name		  sample name to be added to all output files and directories
--s|--step		  run an individual step of the pipeline. Options:
+-h|help		  print help message and exit
+-u|upint	  integer for number of nucleotides upstream of ORF to extract. Default=5000 if not specified
+-d|downint	integer for number of nucleotides downstream of ORF to extract. Default=5000 if not specified
+-q|query	  amino acid fasta (.faa/.fa) file for ORF(s) to use as query. Default=EFB0058.fa if not specified
+-n|name		  sample name to be added to all output files and directories
+-s|step		  run an individual step of the pipeline. Options:
          			  1|mvgenomes --> move genomes into genomes_
          			  2|translate --> translate genomic sequences into amino acid sequences
 				        3|makedbs --> make diamond databases from amino acid sequences
