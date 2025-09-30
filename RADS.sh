@@ -1,5 +1,72 @@
 #!/bin/sh
 
+upint=5000
+downint=5000
+query=EFB0058.fa
+genomespath=""
+samplename=""
+run_all=true
+step=""
+
+while getopts ":u:d:q:g:n:s:h" opt; do
+	case $opt in
+		u)
+			upint="$OPTARG"
+			;;
+		d)
+			downint="$OPTARG"
+			;;
+		q)
+			query="$OPTARG"
+			;;
+		g)
+			genomespath="$OPTARG"
+			;;
+		h)
+			echo "usage:  ./RADS.sh -u [upstream integer (optional, default = 5000)] -d [downstream integer(optional, default = 5000)] -q [fasta query file (optional, default = EFB0058.fa)] -g [path to directory containing directories with genome information. (Required. Often ncbi_dataset/data/)] -n [sample name to appended to all file and directory names. (Optional)] -s [step to run individually. (Optional)]"
+			echo ""
+			echo "[REQUIRED OPTIONS]"
+			echo "-------------------------------------------------------------"
+			echo "-g|--genomespath	path to directory containing directories with genomes information. Each genome should have its own directory containing .fna files"
+			echo ""
+			echo "[OPTIONAL ARGUMENTS]"
+			echo "------------------------------------------------------------"
+			echo "-h|--help		print help message and exit"
+            		echo "-u|--upint	integer for number of nucleotides upstream of ORF to extract. Default=5000 if not specified"
+			echo "-d|--downint	integer for number of nucleotides downstream of ORF to extract. Default=5000 if not specified"
+			echo "-q|--query	amino acid fasta (.faa/.fa) file for ORF(s) to use as query. Default=EFB0058.fa if not specified"
+			echo "-n|--name		sample name to be added to all output files and directories"
+			echo "-s|--step		run an individual step of the pipeline. Options:"
+            echo "         		1|mvgenomes --> move genomes into genomes_${samplename}"
+            echo "         		2|translate --> translate genomic sequences into amino acid sequences"
+			echo "				3|makedbs --> make diamond databases from amino acid sequences"
+			echo "				4|blast --> blast for query in diamond databases"
+			echo "				5|extractcontigs --> extract contigs of specified size (default 10kb) around query"
+			echo "				6|contigorfprocessing --> search for ORFs and run InterProScan on contigs around query"
+			echo "				7|cotranscription --> search for putatively cotranscribed genes around query"
+            		exit 1
+			;;
+		n)
+			if [ -n "$OPTARG" ]; then  # Check if an argument was provided to -n
+                                samplename="$OPTARG"
+                        fi
+                        ;;
+        	s)
+            		step="$OPTARG"
+            		run_all=false
+            		shift 2
+            		;;
+		\?)
+			echo "option -$OPTARG requires an argument. Usage: bash ./RADS.sh -u [upstream integer (optional, default = 5000)] -d [downstream integer(optional, default = 5000)] -q [fasta query file (optional, default = EFB0058.fa)] -g [path to directory containing directories with genome information. Often ncbi_dataset/data/)" >&2
+			exit 1
+			;;
+		:)
+			echo "option -$OPTARG requires an argument. Usage: bash ./RADS.sh -u [upstream integer (optional, default = 5000)] -d [downstream integer(optional, default = 5000)] -q [fasta query file (optional, default = EFB0058.fa)] -g [path to directory containing directories with genome information. Often ncbi_dataset/data/)" >&2
+			exit 1
+			;;
+	esac
+done
+
 mvgenomes( ) {
     mkdir genomes_${samplename}/
     for i in $(ls $genomespath)
@@ -65,9 +132,11 @@ extractcontigs ( ){
     mkdir EFB0058_formatted_coordinates_$samplename/
     mkdir EFB0058_final_coordinates_$samplename/
 
-
+	max_jobs=20
+	count=0
     for i in $(ls genomes_$samplename/)
     do
+	{
         if [ -s blast_results_30_$samplename/EFB0058_blast_${i}translated.faa.db.dmnd.txt ]; then
             echo ${i}
             cut -f2 blast_results_30_$samplename/EFB0058_blast_${i}translated.faa.db.dmnd.txt > EFB0058_ORFS_$samplename/${i}_EFB0058_ORFs.txt
@@ -86,7 +155,14 @@ extractcontigs ( ){
         else
             echo "File ${i} is empty, skipping..."
         fi
+		} &
+
+		((count++))
+		 if ((count % max_jobs == 0)); then
+		 	wait
+		fi
     done
+	wait
 }
 
 contigorfprocessing( ){
@@ -183,73 +259,6 @@ cotranscription ( ){
             > EFB0058_cotxORFS_$samplename/finallists/${i}_EFB0058_cotxORFs.txt
     done
 }
-
-upint=5000
-downint=5000
-query=EFB0058.fa
-genomespath=""
-samplename=""
-run_all=true
-step=""
-
-while getopts ":u:d:q:g:n:s:h" opt; do
-	case $opt in
-		u)
-			upint="$OPTARG"
-			;;
-		d)
-			downint="$OPTARG"
-			;;
-		q)
-			query="$OPTARG"
-			;;
-		g)
-			genomespath="$OPTARG"
-			;;
-		h)
-			echo "usage:  ./RADS.sh -u [upstream integer (optional, default = 5000)] -d [downstream integer(optional, default = 5000)] -q [fasta query file (optional, default = EFB0058.fa)] -g [path to directory containing directories with genome information. (Required. Often ncbi_dataset/data/)] -n [sample name to appended to all file and directory names. (Optional)] -s [step to run individually. (Optional)]"
-			echo ""
-			echo "[REQUIRED OPTIONS]"
-			echo "-------------------------------------------------------------"
-			echo "-g|--genomespath	path to directory containing directories with genomes information. Each genome should have its own directory containing .fna files"
-			echo ""
-			echo "[OPTIONAL ARGUMENTS]"
-			echo "------------------------------------------------------------"
-			echo "-h|--help		print help message and exit"
-            		echo "-u|--upint	integer for number of nucleotides upstream of ORF to extract. Default=5000 if not specified"
-			echo "-d|--downint	integer for number of nucleotides downstream of ORF to extract. Default=5000 if not specified"
-			echo "-q|--query	amino acid fasta (.faa/.fa) file for ORF(s) to use as query. Default=EFB0058.fa if not specified"
-			echo "-n|--name		sample name to be added to all output files and directories"
-			echo "-s|--step		run an individual step of the pipeline. Options:"
-            echo "         		1|mvgenomes --> move genomes into genomes_${samplename}"
-            echo "         		2|translate --> translate genomic sequences into amino acid sequences"
-			echo "				3|makedbs --> make diamond databases from amino acid sequences"
-			echo "				4|blast --> blast for query in diamond databases"
-			echo "				5|extractcontigs --> extract contigs of specified size (default 10kb) around query"
-			echo "				6|contigorfprocessing --> search for ORFs and run InterProScan on contigs around query"
-			echo "				7|cotranscription --> search for putatively cotranscribed genes around query"
-            		exit 1
-			;;
-		n)
-			if [ -n "$OPTARG" ]; then  # Check if an argument was provided to -n
-                                samplename="$OPTARG"
-                        fi
-                        ;;
-        	s)
-            		step="$OPTARG"
-            		run_all=false
-            		shift 2
-            		;;
-		\?)
-			echo "option -$OPTARG requires an argument. Usage: bash ./RADS.sh -u [upstream integer (optional, default = 5000)] -d [downstream integer(optional, default = 5000)] -q [fasta query file (optional, default = EFB0058.fa)] -g [path to directory containing directories with genome information. Often ncbi_dataset/data/)" >&2
-			exit 1
-			;;
-		:)
-			echo "option -$OPTARG requires an argument. Usage: bash ./RADS.sh -u [upstream integer (optional, default = 5000)] -d [downstream integer(optional, default = 5000)] -q [fasta query file (optional, default = EFB0058.fa)] -g [path to directory containing directories with genome information. Often ncbi_dataset/data/)" >&2
-			exit 1
-			;;
-	esac
-done
 
 if [ -z "$genomespath" ]; then
 	echo "Error: Option -g (genomes path) is required." >&2
