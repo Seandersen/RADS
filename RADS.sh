@@ -146,7 +146,7 @@ extractcontigs ( ){
             awk 'BEGIN{OFS="\t"} {F="#"} {up=$3; down=$5; if (up>down) print down, up; else print up, down}' EFB0058_ORFS_$samplename/${i}_EFB0058_hits_coordinates.txt > EFB0058_formatted_coordinates_$samplename/${i}_EFB0058_formatted_coordinates.txt
             awk -v upint=$upint -v downint=$downint 'BEGIN{OFS="\t"} {up=$1-upint; down=$2+downint; if (up>0) print up, down; else print 0, down}' EFB0058_formatted_coordinates_$samplename/${i}_EFB0058_formatted_coordinates.txt > EFB0058_final_coordinates_$samplename/${i}_EFB0058_final_coordinates.txt
             echo "Coordinates formatted"
-            cut -f 2 blast_results_30_$samplename/EFB0058_blast_${i}translated.faa.db.dmnd.txt | cut -f 1 -d "_" > EFB0058_flanks_$samplename/${i}_EFB0058_contigs.txt
+            cut -f 2 blast_results_30_$samplename/EFB0058_blast_${i}translated.faa.db.dmnd.txt | cut -f 1,2 -d "_" > EFB0058_flanks_$samplename/${i}_EFB0058_contigs.txt
             echo "Contig names extracted"
             paste EFB0058_flanks_$samplename/${i}_EFB0058_contigs.txt EFB0058_final_coordinates_$samplename/${i}_EFB0058_final_coordinates.txt > bedfiles_$samplename/${i}.bed
             echo "Bed file created"
