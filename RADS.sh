@@ -286,6 +286,7 @@ if $run_all; then
     mvgenomes
     translate
     makedbs
+	blast
     extractcontigs
     contigorfprocessing
     cotranscription
