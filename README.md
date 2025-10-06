@@ -80,9 +80,9 @@ To change the defaults, simply supply the corresponding options.
 -q|query	  amino acid fasta (.faa/.fa) file for ORF(s) to use as query. Default=EFB0058.fa if not specified
 -n|name		  sample name to be added to all output files and directories
 -s|step		  run an individual step of the pipeline. Options:
-         			  1|mvgenomes --> move genomes into genomes_
-         			  2|translate --> translate genomic sequences into amino acid sequences
-				        3|makedbs --> make diamond databases from amino acid sequences
+						1|mvgenomes --> move genomes into genomes_
+						2|translate --> translate genomic sequences into amino acid sequences
+						3|makedbs --> make diamond databases from amino acid sequences
 				        4|blast --> blast for query in diamond databases
 				        5|extractcontigs --> extract contigs of specified size (default 10kb) around query
 				        6|contigorfprocessing --> search for ORFs and run InterProScan on contigs around query
