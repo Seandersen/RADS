@@ -178,8 +178,8 @@ contigorfprocessing( ){
     -i allcontigsconcatenated_filtered_$samplename.fna \
     -o allcontigsconcatenated_$samplename.txt \
     -a allcontigsconcatenated_$samplename.faa
-    sed 's/*//g' allcontigsconcatenated_$samplename.faa > interposcaninput_$samplename.faa
-    bash my_interproscan/interproscan-*/interproscan.sh -i interposcaninput_$samplename.faa
+    sed 's/*//g' allcontigsconcatenated_$samplename.faa > interproscaninput_$samplename.faa
+    bash my_interproscan/interproscan-*/interproscan.sh -i interproscaninput_$samplename.faa
 }
 
 cotranscription ( ){
