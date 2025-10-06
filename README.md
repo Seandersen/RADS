@@ -5,11 +5,19 @@ Recombinase Associated Defense Search: a package for extracting loci surrounding
 RADS was developed by Shelby E Andersen in collaboration with Joshua M Kirsch, Jay R Hesselberth, and Breck A Duerkop as a command line tool for extractng loci surrounding the EF_B0058 serine recombinase for the purpose of identifying surrounding ORFS to find antiphage defense systems. RADS may now be used to extract any sized locus surrounding an ORF of interest.
 
 # Installation
+For easy conda installation:
 
 ```{bash}
+conda env create -f rads.yml
+```
+
+OR
+
+For a more personalized conda environment experience:
+```{bash}
 ##Create and activate a conda environment for RADS
-conda create -n RADS
-conda activate RADS
+conda create -n rads
+conda activate rads
 
 ##Install diamond blast into the RADS conda environment
 ##If using a non-silicon chip Mac or another linux distribution
