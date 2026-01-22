@@ -1,0 +1,81 @@
+---
+title: "RADS Binomial Analysis"
+author: "Shelby E Andersen"
+output: html_document
+---
+
+This code will run the binomial analysis to determine domains that are enriched in RADS contigs compared to the rest of the genome.
+
+BEFORE YOU BEGIN:
+  1. Run InterProScan on your ENTIRE genomes that have query sequences. This will require filtering input genomes to only include genomes that have your query sequence (reference master${samplename}.txt) then running InterProScan on those genomes. Have results put into "interproscan_wholegenomes.tsv"
+
+```{r include=FALSE}
+#install.packages('tidyverse')
+library(tidyverse)
+library(knitr)
+library(dplyr)
+#install.packages("MetBrewer")
+library(MetBrewer)
+library(ggplot2)
+library(ggprism)
+library(ggrepel)
+```
+
+```{r}
+#Read in all bacillota interprodata for genomes with query
+genomes_interprodata <- read_tsv("interproscan_wholegenomes.tsv", col_names = c("genome.id", "gene.id", "md5", "length", "test", "id", "description", "start", "stop", "sig", "T.F", "date", "interpro.id", "interpro.description", "v15", "v16"))
+
+contigs_interprodata <- read.csv("interposcaninput_$samplename.csv", header = FALSE)
+pfam_contigs <- filter(contigs_interprodata, V5 == "Pfam")
+pfam_genomes <- filter(genomes_interprodata, test =="Pfam")
+
+#filter master for interpro IDs that are only found in RADS contigs
+domainsincontigs_genomes <- filter(pfam_genomes, interpro.id %in% pfam_contigs$V13)
+
+#get a list of all interpro IDs that are found in RADS contigs
+IDsandDescripts <- select(pfam_contigs, V13, V14)
+unique_IDsandDescripts <- unique(IDsandDescripts)
+
+#Determine probability of a domain being in RADS contigs at random by domains_region / domains_total
+# domains_0058region <- pfam_contigs %>% tally()
+# domains_total <- pfam_genomes %>% tally()
+# probability <- domains_0058region/domains_total
+
+#Run binomial to add p-values
+results <- list()
+for (i in unique_IDsandDescripts$V13) {
+  domains_total <- pfam_genomes %>% tally() %>% pull(n)
+  successes <- filter(pfam_contigs, V13 == i) %>% tally() %>% pull(n)
+  trials <- filter(domainsin0058_master, interpro.id == i) %>% tally() %>% pull(n)
+  probability <- trials/domains_total
+  binom_test_result <- try({
+    binom.test(successes, trials, p=probability)
+  }, silent = TRUE)
+  results[[i]] <- ifelse(class(binom_test_result) == "htest", binom_test_result$p.value, NA)
+}
+unique_IDsandDescripts$p.value <- unlist(results)
+
+#Add probability to list
+results <- list()
+for (i in unique_IDsandDescripts$V13) {
+  domains_total <- pfam_genomes %>% tally() %>% pull(n)
+  successes <- filter(pfam_contigs, V13 == i) %>% tally() %>% pull(n)
+  trials <- filter(domainsin0058_master, interpro.id == i) %>% tally() %>% pull(n)
+  probability <- trials/domains_total
+  results[[i]] <- probability
+}
+unique_IDsandDescripts$probability <-unlist(results)
+
+#Adjust p-values
+unique_IDsandDescripts <- unique_IDsandDescripts %>% as_tibble() %>% mutate(p_adju = p.adjust(p.value, method = "BH"), p_scaled = -10 * log10(p_adju))
+
+#Add n for number of instances of domain in contigs
+results <- list()
+for (i in unique_IDsandDescripts$V13) {
+  successes <- filter(pfam_contigs, V13 == i) %>% tally() %>% pull(n)
+  results[[i]] <- successes
+}
+unique_IDsandDescripts$n <- unlist(results)
+
+write.csv(unique_IDsandDescripts, file="BinomialAnalysis.csv")
+```

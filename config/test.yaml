@@ -1,0 +1,42 @@
+# RADS Test Configuration
+# =======================
+# Uses local test genomes for quick testing
+
+sample_name: "test"
+
+download:
+  enabled: false
+  taxon: "Enterococcus faecalis"
+  source: "refseq"
+  assembly_level: "complete"
+  max_genomes: 10
+
+genomes_path: "testgenomes/ncbi_dataset/data"
+
+query_file: "resources/EFB0058.fa"
+
+upstream_nt: 5000
+downstream_nt: 5000
+
+prodigal:
+  mode: "meta"
+
+diamond:
+  identity: 30
+  threads: 4
+  max_target_seqs: 0
+
+interproscan:
+  enabled: false
+  path: "/path/to/interproscan.sh"
+
+cotranscription:
+  identity_threshold: 95
+  distance_threshold: 100
+
+# DefenseFinder settings
+defensefinder:
+  enabled: true
+  db_type: "unordered"
+  coverage: 0.4
+  workers: 4

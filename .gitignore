@@ -1,0 +1,43 @@
+# Snakemake
+.snakemake/
+logs/
+results/
+
+# Pixi
+.pixi/
+pixi.lock
+
+# Data files
+*.fna
+*.faa
+*.fasta
+*.fastq
+*.gz
+*.tsv
+*.dmnd
+
+# Keep config example
+!config/config.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+.eggs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+temp/
+tmp/
+*.tmp

@@ -1,0 +1,46 @@
+[workspace]
+name = "rads"
+version = "1.0.0"
+description = "Recombinase Associated Defense Search Pipeline"
+channels = ["conda-forge", "bioconda"]
+platforms = ["osx-arm64", "osx-64", "linux-64"]
+
+[dependencies]
+python = ">=3.11,<3.13"
+snakemake = ">=8.0"
+ncbi-datasets-cli = ">=16.0"
+entrez-direct = ">=22.0"
+diamond = ">=2.1"
+prodigal = ">=2.6"
+seqkit = ">=2.8"
+pandas = ">=2.0"
+biopython = ">=1.80"
+openjdk = ">=17"
+openpyxl = ">=3.0"
+hmmer = ">=3.1"
+
+[feature.dashboard.dependencies]
+shiny = ">=0.6"
+plotly = ">=5.0"
+polars = ">=0.20"
+pyarrow = ">=14.0"
+
+[feature.defensefinder.dependencies]
+python = ">=3.10,<3.12"
+hmmer = ">=3.1"
+pip = "*"
+
+[feature.defensefinder.pypi-dependencies]
+mdmparis-defense-finder = "*"
+
+[environments]
+default = ["dashboard"]
+defensefinder = ["defensefinder"]
+
+[tasks]
+run = "snakemake --cores 8 --use-conda"
+dry-run = "snakemake -n"
+dag = "snakemake --dag | dot -Tsvg > dag.svg"
+test = "snakemake --cores 4 --configfile config/test.yaml --use-conda"
+dashboard = "shiny run dashboard/app.py --reload"
+clean = "rm -rf results/* logs/*"

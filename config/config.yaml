@@ -1,0 +1,53 @@
+# RADS Pipeline Configuration
+# ===========================
+
+# Sample name (appended to output directories)
+sample_name: "efb0058_hits_test"
+
+# Download settings (set enabled: false to use local genomes)
+download:
+  enabled: true                      # Set true to download from NCBI
+  accession_file: "testaccessions.txt"  # File with nucleotide accessions (one per line)
+  # Taxon-based settings (used if accession_file is not set)
+  taxon: "Bacillota"                 # NCBI taxon query
+  source: "refseq"                   # refseq or genbank
+  assembly_level: "complete"         # complete, chromosome, scaffold, contig
+  max_genomes: 0                     # Limit number of genomes
+
+# Local genomes path (used when download.enabled = false)
+# Should point to directory containing genome directories with .fna files
+genomes_path: "testgenomes/ncbi_dataset/data"
+
+# Query sequence file (amino acid FASTA)
+query_file: "resources/EFB0058.fa"
+
+# Flanking region extraction
+upstream_nt: 5000
+downstream_nt: 5000
+
+# Prodigal settings
+prodigal:
+  mode: "meta"  # meta or single
+
+# Diamond BLAST settings
+diamond:
+  identity: 30           # Minimum percent identity
+  threads: 8             # Number of threads
+  max_target_seqs: 0     # 0 = no limit
+
+# InterProScan settings (requires manual installation)
+interproscan:
+  enabled: false
+  path: ""  # Set to your InterProScan installation path if enabled
+
+# Co-transcription analysis
+cotranscription:
+  identity_threshold: 95    # Identity for full-length query matching
+  distance_threshold: 100   # Max bp distance for co-transcription
+
+# DefenseFinder settings
+defensefinder:
+  enabled: true
+  db_type: "unordered"      # Use unordered for contigs not ordered by genomic position
+  coverage: 0.4             # Minimum coverage threshold
+  workers: 4                # Number of parallel workers

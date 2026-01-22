@@ -1,0 +1,1093 @@
+"""
+RADS Results Explorer - PyShiny Dashboard
+Interactive visualization of RADS pipeline results.
+"""
+
+from pathlib import Path
+from shiny import App, reactive, render, ui
+import plotly.express as px
+import plotly.graph_objects as go
+import polars as pl
+
+# Import data loader
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+from utils.data_loader import (
+    find_results_dir,
+    load_blast_results,
+    load_genome_manifest,
+    load_cotranscription_results,
+    load_contig_orfs,
+    load_interproscan_results,
+    get_summary_stats,
+    load_defensefinder_systems,
+    load_defensefinder_genes,
+    load_pipeline_metrics,
+    load_hit_to_contig_mapping,
+)
+from utils.locus_viewer import (
+    create_locus_figure,
+    create_defense_locus_figure,
+    get_contig_choices,
+    get_contigs_with_hits,
+    get_contigs_with_defense,
+    create_color_legend_html,
+)
+
+
+# Teal/slate color palette for charts (matching defense system biology theme)
+TEAL_PALETTE = [
+    "#2d4a4a",  # Darkest teal
+    "#3d5a5a",  # Dark teal
+    "#4a6670",  # Slate blue-teal
+    "#5a7a7a",  # Medium teal
+    "#6b9090",  # Medium-light teal
+    "#7a9e9e",  # Light teal
+    "#8fb3b3",  # Lighter teal/sage
+    "#a8c4c4",  # Light sage
+    "#b5cece",  # Pale sage
+    "#c5dada",  # Very pale sage
+]
+
+# Set plotly default color sequence
+px.defaults.color_discrete_sequence = TEAL_PALETTE
+
+# Chart styling constants
+CHART_COLORS = {
+    "primary": "#2d4a4a",
+    "secondary": "#4a6670",
+    "tertiary": "#6b9090",
+    "light": "#8fb3b3",
+    "background": "#f5f8f8",
+    "grid": "#e0e8e8",
+}
+
+# Custom CSS for teal/slate theme
+CUSTOM_CSS = """
+<style>
+/* Sidebar styling */
+.bslib-sidebar-layout > .sidebar {
+    background-color: #2d4a4a !important;
+    color: #ffffff !important;
+}
+
+.bslib-sidebar-layout > .sidebar .form-label,
+.bslib-sidebar-layout > .sidebar label,
+.bslib-sidebar-layout > .sidebar h4,
+.bslib-sidebar-layout > .sidebar h5 {
+    color: #ffffff !important;
+}
+
+.bslib-sidebar-layout > .sidebar hr {
+    border-color: #4a6670 !important;
+}
+
+/* Value boxes */
+.bslib-value-box {
+    background-color: #3d5a5a !important;
+    border: none !important;
+}
+
+.bslib-value-box .value-box-title {
+    color: #b5cece !important;
+}
+
+.bslib-value-box .value-box-value {
+    color: #ffffff !important;
+}
+
+.bslib-value-box .value-box-showcase {
+    color: #8fb3b3 !important;
+}
+
+/* Nav tabs */
+.nav-link.active {
+    background-color: #4a6670 !important;
+    color: #ffffff !important;
+    border-color: #4a6670 !important;
+}
+
+.nav-link {
+    color: #2d4a4a !important;
+}
+
+.nav-link:hover {
+    color: #3d5a5a !important;
+    border-color: #6b9090 !important;
+}
+
+/* Cards */
+.card {
+    border-color: #b5cece !important;
+}
+
+.card-header {
+    background-color: #f5f8f8 !important;
+    border-color: #b5cece !important;
+    color: #2d4a4a !important;
+}
+
+/* Buttons */
+.btn-primary, .btn-default {
+    background-color: #4a6670 !important;
+    border-color: #3d5a5a !important;
+    color: #ffffff !important;
+}
+
+.btn-primary:hover, .btn-default:hover {
+    background-color: #3d5a5a !important;
+    border-color: #2d4a4a !important;
+}
+
+/* Sliders */
+.irs--shiny .irs-bar {
+    background: #4a6670 !important;
+    border-color: #4a6670 !important;
+}
+
+.irs--shiny .irs-single {
+    background-color: #3d5a5a !important;
+}
+
+.irs--shiny .irs-handle {
+    border-color: #2d4a4a !important;
+}
+
+/* Select inputs */
+.selectize-input {
+    border-color: #b5cece !important;
+}
+
+.selectize-input.focus {
+    border-color: #6b9090 !important;
+    box-shadow: 0 0 0 0.2rem rgba(74, 102, 112, 0.25) !important;
+}
+
+/* Radio buttons */
+.shiny-input-container .radio label input:checked + span::before {
+    background-color: #4a6670 !important;
+    border-color: #4a6670 !important;
+}
+
+/* Page background */
+body {
+    background-color: #f5f8f8 !important;
+}
+
+/* Main content area */
+.bslib-sidebar-layout > .main {
+    background-color: #ffffff !important;
+}
+</style>
+"""
+
+
+# UI Definition
+app_ui = ui.page_sidebar(
+    ui.sidebar(
+        ui.h4("RADS Explorer"),
+        ui.hr(),
+        ui.input_select(
+            "sample_select",
+            "Select Sample",
+            choices=[],
+        ),
+        ui.output_ui("sample_name_display"),
+        ui.hr(),
+        ui.h5("Filters"),
+        ui.input_slider(
+            "identity_filter",
+            "Min % Identity",
+            min=0,
+            max=100,
+            value=30,
+        ),
+        ui.input_slider(
+            "length_filter",
+            "Min Alignment Length",
+            min=0,
+            max=500,
+            value=0,
+        ),
+        ui.hr(),
+        ui.download_button("download_blast", "Download BLAST Results"),
+        width=280,
+    ),
+    ui.navset_card_tab(
+        ui.nav_panel(
+            "Summary",
+            ui.layout_columns(
+                ui.value_box(
+                    "Total Genomes",
+                    ui.output_text("stat_genomes"),
+                    showcase=ui.HTML('<i class="fa-solid fa-dna" style="font-size: 2rem;"></i>'),
+                    theme="primary",
+                ),
+                ui.value_box(
+                    "BLAST Hits",
+                    ui.output_text("stat_blast_hits"),
+                    showcase=ui.HTML('<i class="fa-solid fa-bullseye" style="font-size: 2rem;"></i>'),
+                    theme="success",
+                ),
+                ui.value_box(
+                    "Genomes with Hits",
+                    ui.output_text("stat_genomes_hits"),
+                    showcase=ui.HTML('<i class="fa-solid fa-check" style="font-size: 2rem;"></i>'),
+                    theme="info",
+                ),
+                ui.value_box(
+                    "Co-transcribed Pairs",
+                    ui.output_text("stat_cotx"),
+                    showcase=ui.HTML('<i class="fa-solid fa-link" style="font-size: 2rem;"></i>'),
+                    theme="warning",
+                ),
+                col_widths=[3, 3, 3, 3],
+            ),
+            ui.layout_columns(
+                ui.value_box(
+                    "Defense Systems",
+                    ui.output_text("stat_defense_systems"),
+                    showcase=ui.HTML('<i class="fa-solid fa-shield" style="font-size: 2rem;"></i>'),
+                    theme="danger",
+                ),
+                ui.value_box(
+                    "Hits per Mb",
+                    ui.output_text("stat_hits_per_mb"),
+                    showcase=ui.HTML('<i class="fa-solid fa-chart-line" style="font-size: 2rem;"></i>'),
+                    theme="secondary",
+                ),
+                ui.value_box(
+                    "Discovery Rate (per contig)",
+                    ui.output_text("stat_discovery_per_contig"),
+                    showcase=ui.HTML('<i class="fa-solid fa-magnifying-glass" style="font-size: 2rem;"></i>'),
+                    theme="light",
+                ),
+                ui.value_box(
+                    "Discovery Rate (per genome)",
+                    ui.output_text("stat_discovery_per_genome"),
+                    showcase=ui.HTML('<i class="fa-solid fa-bacteria" style="font-size: 2rem;"></i>'),
+                    theme="dark",
+                ),
+                col_widths=[3, 3, 3, 3],
+            ),
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Pipeline Overview"),
+                    ui.output_ui("pipeline_status"),
+                ),
+                ui.card(
+                    ui.card_header("Hits per Genome"),
+                    ui.output_ui("hits_per_genome_plot"),
+                ),
+                col_widths=[4, 8],
+            ),
+        ),
+        ui.nav_panel(
+            "BLAST Results",
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Identity vs Length"),
+                    ui.output_ui("blast_scatter_plot"),
+                    full_screen=True,
+                ),
+                ui.card(
+                    ui.card_header("Identity Distribution"),
+                    ui.output_ui("identity_histogram"),
+                    full_screen=True,
+                ),
+                col_widths=[6, 6],
+            ),
+            ui.card(
+                ui.card_header("BLAST Hits Table"),
+                ui.output_data_frame("blast_table"),
+                full_screen=True,
+            ),
+        ),
+        ui.nav_panel(
+            "Contig Analysis",
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("ORF Length Distribution"),
+                    ui.output_ui("orf_length_plot"),
+                    full_screen=True,
+                ),
+                ui.card(
+                    ui.card_header("ORFs per Contig"),
+                    ui.output_ui("orfs_per_contig_plot"),
+                    full_screen=True,
+                ),
+                col_widths=[6, 6],
+            ),
+            ui.card(
+                ui.card_header("ORF Details"),
+                ui.output_data_frame("orf_table"),
+                full_screen=True,
+            ),
+        ),
+        ui.nav_panel(
+            "Co-transcription",
+            ui.card(
+                ui.card_header("Co-transcribed Gene Pairs"),
+                ui.output_data_frame("cotx_table"),
+                full_screen=True,
+            ),
+            ui.card(
+                ui.card_header("Distance Distribution"),
+                ui.output_ui("cotx_distance_plot"),
+                full_screen=True,
+            ),
+        ),
+        ui.nav_panel(
+            "Locus Viewer",
+            ui.layout_sidebar(
+                ui.sidebar(
+                    ui.h5("Contig Selection"),
+                    ui.input_radio_buttons(
+                        "locus_filter_type",
+                        "Filter contigs by:",
+                        choices={
+                            "all": "All contigs",
+                            "hits": "Contigs with query hits",
+                            "defense": "Contigs with defense systems",
+                        },
+                        selected="hits",
+                    ),
+                    ui.hr(),
+                    ui.input_select(
+                        "locus_contig_select",
+                        "Select Contig:",
+                        choices=[],
+                    ),
+                    ui.hr(),
+                    ui.h6("Color Legend"),
+                    ui.output_ui("locus_color_legend"),
+                    width=280,
+                ),
+                ui.card(
+                    ui.card_header(ui.output_text("locus_title")),
+                    ui.output_ui("locus_viewer_plot"),
+                    full_screen=True,
+                ),
+            ),
+            ui.card(
+                ui.card_header("ORF Details for Selected Contig"),
+                ui.output_data_frame("locus_orf_table"),
+                full_screen=True,
+            ),
+        ),
+        ui.nav_panel(
+            "Domain Annotations",
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Top Domains"),
+                    ui.output_ui("domain_frequency_plot"),
+                    full_screen=True,
+                ),
+                ui.card(
+                    ui.card_header("Analysis Types"),
+                    ui.output_ui("analysis_type_plot"),
+                    full_screen=True,
+                ),
+                col_widths=[6, 6],
+            ),
+            ui.card(
+                ui.card_header("InterProScan Results"),
+                ui.output_data_frame("interproscan_table"),
+                full_screen=True,
+            ),
+        ),
+        ui.nav_panel(
+            "DefenseFinder",
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Defense System Types"),
+                    ui.output_ui("defense_system_type_plot"),
+                    full_screen=True,
+                ),
+                ui.card(
+                    ui.card_header("Defense Systems by Subtype"),
+                    ui.output_ui("defense_subtype_plot"),
+                    full_screen=True,
+                ),
+                col_widths=[6, 6],
+            ),
+            ui.card(
+                ui.card_header("Defense System Locus Viewer"),
+                ui.layout_sidebar(
+                    ui.sidebar(
+                        ui.input_select(
+                            "defense_contig_select",
+                            "Select contig with defense system:",
+                            choices=[],
+                        ),
+                        ui.output_ui("defense_system_info"),
+                        width=280,
+                    ),
+                    ui.output_ui("defense_locus_plot"),
+                ),
+                full_screen=True,
+            ),
+            ui.card(
+                ui.card_header("Defense Systems Table"),
+                ui.output_data_frame("defense_systems_table"),
+                full_screen=True,
+            ),
+            ui.card(
+                ui.card_header("Defense Genes Table"),
+                ui.output_data_frame("defense_genes_table"),
+                full_screen=True,
+            ),
+        ),
+    ),
+    title="RADS Results Explorer",
+    fillable=True,
+)
+
+# Wrap with head content for CSS
+app_ui = ui.page_fluid(
+    ui.tags.head(ui.HTML(CUSTOM_CSS)),
+    app_ui,
+)
+
+
+def server(input, output, session):
+    # Initialize sample selector
+    @reactive.effect
+    def _():
+        samples = find_results_dir("results")
+        if samples:
+            ui.update_select("sample_select", choices=samples, selected=samples[0])
+
+    # Reactive data loaders
+    @reactive.calc
+    def results_dir():
+        sample = input.sample_select()
+        if sample:
+            return f"results/{sample}"
+        return None
+
+    @reactive.calc
+    def blast_data():
+        rdir = results_dir()
+        if rdir:
+            return load_blast_results(rdir)
+        return None
+
+    @reactive.calc
+    def filtered_blast_data():
+        df = blast_data()
+        if df is None or len(df) == 0:
+            return None
+
+        min_identity = input.identity_filter()
+        min_length = input.length_filter()
+
+        filtered = df.filter(
+            (df["pident"] >= min_identity) &
+            (df["length"] >= min_length)
+        )
+        return filtered
+
+    @reactive.calc
+    def cotx_data():
+        rdir = results_dir()
+        if rdir:
+            return load_cotranscription_results(rdir)
+        return None
+
+    @reactive.calc
+    def orf_data():
+        rdir = results_dir()
+        if rdir:
+            return load_contig_orfs(rdir)
+        return None
+
+    @reactive.calc
+    def summary_stats():
+        rdir = results_dir()
+        if rdir:
+            return get_summary_stats(rdir)
+        return {}
+
+    @reactive.calc
+    def interproscan_data():
+        rdir = results_dir()
+        if rdir:
+            return load_interproscan_results(rdir)
+        return None
+
+    @reactive.calc
+    def defensefinder_systems():
+        rdir = results_dir()
+        if rdir:
+            return load_defensefinder_systems(rdir)
+        return None
+
+    @reactive.calc
+    def defensefinder_genes():
+        rdir = results_dir()
+        if rdir:
+            return load_defensefinder_genes(rdir)
+        return None
+
+    @reactive.calc
+    def hit_to_contig_mapping():
+        rdir = results_dir()
+        if rdir:
+            return load_hit_to_contig_mapping(rdir)
+        return None
+
+    @reactive.calc
+    def pipeline_metrics():
+        rdir = results_dir()
+        if rdir:
+            return load_pipeline_metrics(rdir)
+        return None
+
+    # Sample name display in sidebar
+    @render.ui
+    def sample_name_display():
+        metrics = pipeline_metrics()
+        sample = input.sample_select()
+        if metrics and metrics.get("sample_name"):
+            return ui.tags.div(
+                ui.tags.strong("Sample: "),
+                ui.tags.span(metrics["sample_name"], style="color: #0d6efd;"),
+                style="margin-top: 5px; font-size: 0.9rem;"
+            )
+        elif sample:
+            return ui.tags.div(
+                ui.tags.strong("Sample: "),
+                ui.tags.span(sample, style="color: #0d6efd;"),
+                style="margin-top: 5px; font-size: 0.9rem;"
+            )
+        return None
+
+    # Summary tab outputs
+    @render.text
+    def stat_genomes():
+        stats = summary_stats()
+        return str(stats.get("total_genomes", 0))
+
+    @render.text
+    def stat_blast_hits():
+        stats = summary_stats()
+        return str(stats.get("total_blast_hits", 0))
+
+    @render.text
+    def stat_genomes_hits():
+        stats = summary_stats()
+        return str(stats.get("genomes_with_hits", 0))
+
+    @render.text
+    def stat_cotx():
+        stats = summary_stats()
+        return str(stats.get("cotranscribed_pairs", 0))
+
+    @render.text
+    def stat_defense_systems():
+        metrics = pipeline_metrics()
+        if metrics:
+            return str(metrics.get("defense_systems", 0))
+        # Fallback to counting from defensefinder data
+        df = defensefinder_systems()
+        if df is not None and len(df) > 0:
+            return str(len(df))
+        return "0"
+
+    @render.text
+    def stat_hits_per_mb():
+        metrics = pipeline_metrics()
+        if metrics:
+            return f"{metrics.get('hits_per_mb', 0):.3f}"
+        return "N/A"
+
+    @render.text
+    def stat_discovery_per_contig():
+        metrics = pipeline_metrics()
+        if metrics:
+            return f"{metrics.get('discovery_rate_per_contig', 0):.3f}"
+        return "N/A"
+
+    @render.text
+    def stat_discovery_per_genome():
+        metrics = pipeline_metrics()
+        if metrics:
+            return f"{metrics.get('discovery_rate_per_genome', 0):.3f}"
+        return "N/A"
+
+    @render.ui
+    def pipeline_status():
+        stats = summary_stats()
+        metrics = pipeline_metrics()
+
+        items = [
+            f"Genomes processed: {stats.get('total_genomes', 0)}",
+            f"Total ORFs found: {stats.get('total_orfs', 0)}",
+            f"Extracted contigs: {stats.get('total_contigs', 0)}",
+            f"Domain annotations: {stats.get('domain_annotations', 0)}",
+        ]
+
+        # Add query info from metrics
+        if metrics:
+            query_file = metrics.get("query_file", "N/A")
+            query_name = metrics.get("query_name", "N/A")
+            items.append(f"Query file: {query_file}")
+            items.append(f"Query sequence: {query_name}")
+            items.append(f"Total input size: {metrics.get('total_input_mb', 0):.2f} Mb")
+
+        return ui.tags.ul([ui.tags.li(item) for item in items])
+
+    @render.ui
+    def hits_per_genome_plot():
+        df = filtered_blast_data()
+        if df is None or len(df) == 0:
+            return ui.p("No data available")
+
+        counts = df.group_by("genome").len().sort("len", descending=True)
+        fig = px.bar(
+            counts.to_pandas(),
+            x="genome",
+            y="len",
+            labels={"genome": "Genome", "len": "Hit Count"},
+            color_discrete_sequence=[CHART_COLORS["primary"]],
+        )
+        fig.update_layout(
+            xaxis_tickangle=-45,
+            margin=dict(b=100),
+            height=300,
+            plot_bgcolor=CHART_COLORS["background"],
+        )
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    # BLAST tab outputs
+    @render.ui
+    def blast_scatter_plot():
+        df = filtered_blast_data()
+        if df is None or len(df) == 0:
+            return ui.p("No data available")
+
+        fig = px.scatter(
+            df.to_pandas(),
+            x="length",
+            y="pident",
+            color="genome",
+            hover_data=["query_id", "subject_id", "evalue"],
+            labels={"length": "Alignment Length", "pident": "% Identity"},
+            color_discrete_sequence=TEAL_PALETTE,
+        )
+        fig.update_layout(height=400, plot_bgcolor=CHART_COLORS["background"])
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    @render.ui
+    def identity_histogram():
+        df = filtered_blast_data()
+        if df is None or len(df) == 0:
+            return ui.p("No data available")
+
+        fig = px.histogram(
+            df.to_pandas(),
+            x="pident",
+            nbins=20,
+            labels={"pident": "% Identity"},
+            color_discrete_sequence=[CHART_COLORS["primary"]],
+        )
+        fig.update_layout(height=400, plot_bgcolor=CHART_COLORS["background"])
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    @render.data_frame
+    def blast_table():
+        df = filtered_blast_data()
+        if df is None:
+            return None
+        return render.DataTable(df.to_pandas(), filters=True, height="400px")
+
+    # Contig analysis outputs
+    @render.ui
+    def orf_length_plot():
+        df = orf_data()
+        if df is None or len(df) == 0:
+            return ui.p("No data available")
+
+        fig = px.histogram(
+            df.to_pandas(),
+            x="length",
+            nbins=30,
+            labels={"length": "ORF Length (bp)"},
+            color_discrete_sequence=[CHART_COLORS["secondary"]],
+        )
+        fig.update_layout(height=350, plot_bgcolor=CHART_COLORS["background"])
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    @render.ui
+    def orfs_per_contig_plot():
+        df = orf_data()
+        if df is None or len(df) == 0:
+            return ui.p("No data available")
+
+        counts = df.group_by("contig").len()
+        fig = px.bar(
+            counts.to_pandas(),
+            x="contig",
+            y="len",
+            labels={"contig": "Contig", "len": "ORF Count"},
+            color_discrete_sequence=[CHART_COLORS["tertiary"]],
+        )
+        fig.update_layout(
+            xaxis_tickangle=-45,
+            margin=dict(b=100),
+            height=350,
+            plot_bgcolor=CHART_COLORS["background"],
+        )
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    @render.data_frame
+    def orf_table():
+        df = orf_data()
+        if df is None:
+            return None
+        return render.DataTable(df.to_pandas(), filters=True, height="400px")
+
+    # Co-transcription outputs
+    @render.data_frame
+    def cotx_table():
+        df = cotx_data()
+        if df is None:
+            return None
+        return render.DataTable(df.to_pandas(), filters=True, height="400px")
+
+    @render.ui
+    def cotx_distance_plot():
+        df = cotx_data()
+        if df is None or len(df) == 0:
+            return ui.p("No co-transcribed pairs found")
+
+        fig = px.histogram(
+            df.to_pandas(),
+            x="distance",
+            nbins=20,
+            labels={"distance": "Distance (bp)"},
+            title="Distance between query and downstream ORF",
+            color_discrete_sequence=[CHART_COLORS["tertiary"]],
+        )
+        fig.update_layout(height=300, plot_bgcolor=CHART_COLORS["background"])
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    # Domain Annotations tab outputs
+    @render.ui
+    def domain_frequency_plot():
+        df = interproscan_data()
+        if df is None or len(df) == 0:
+            return ui.p("No InterProScan results available. Run pipeline with InterProScan enabled.")
+
+        # Count domain frequencies by signature description
+        if "signature_desc" not in df.columns:
+            return ui.p("No domain annotations found")
+
+        counts = (
+            df.filter(df["signature_desc"] != "-")
+            .group_by("signature_desc")
+            .len()
+            .sort("len", descending=True)
+            .head(15)
+        )
+
+        if len(counts) == 0:
+            return ui.p("No domain annotations found")
+
+        fig = px.bar(
+            counts.to_pandas(),
+            x="len",
+            y="signature_desc",
+            orientation="h",
+            labels={"len": "Count", "signature_desc": "Domain"},
+            color_discrete_sequence=[CHART_COLORS["secondary"]],
+        )
+        fig.update_layout(
+            height=400,
+            yaxis={"categoryorder": "total ascending"},
+            margin=dict(l=200),
+            plot_bgcolor=CHART_COLORS["background"],
+        )
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    @render.ui
+    def analysis_type_plot():
+        df = interproscan_data()
+        if df is None or len(df) == 0:
+            return ui.p("No InterProScan results available")
+
+        if "analysis" not in df.columns:
+            return ui.p("No analysis data found")
+
+        counts = df.group_by("analysis").len().sort("len", descending=True)
+
+        fig = px.pie(
+            counts.to_pandas(),
+            values="len",
+            names="analysis",
+            title="Annotations by Database",
+            color_discrete_sequence=TEAL_PALETTE,
+        )
+        fig.update_layout(height=400)
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    @render.data_frame
+    def interproscan_table():
+        df = interproscan_data()
+        if df is None or len(df) == 0:
+            return None
+
+        # Select key columns for display
+        display_cols = [
+            col for col in ["protein_accession", "analysis", "signature_accession",
+                           "signature_desc", "start", "stop", "interpro_accession",
+                           "interpro_desc", "go_annotations"]
+            if col in df.columns
+        ]
+
+        if not display_cols:
+            return None
+
+        return render.DataTable(df.select(display_cols).to_pandas(), filters=True, height="400px")
+
+    # DefenseFinder tab outputs
+    @render.ui
+    def defense_system_type_plot():
+        df = defensefinder_systems()
+        if df is None or len(df) == 0:
+            return ui.p("No defense systems found. Run pipeline with DefenseFinder enabled.")
+
+        if "type" not in df.columns:
+            return ui.p("No defense system type data found")
+
+        counts = df.group_by("type").len().sort("len", descending=True)
+
+        if len(counts) == 0:
+            return ui.p("No defense systems found")
+
+        fig = px.bar(
+            counts.to_pandas(),
+            x="type",
+            y="len",
+            labels={"type": "Defense System Type", "len": "Count"},
+            title="Defense Systems by Type",
+            color_discrete_sequence=[CHART_COLORS["primary"]],
+        )
+        fig.update_layout(
+            xaxis_tickangle=-45,
+            height=400,
+            margin=dict(b=100),
+            plot_bgcolor=CHART_COLORS["background"],
+        )
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    @render.ui
+    def defense_subtype_plot():
+        df = defensefinder_systems()
+        if df is None or len(df) == 0:
+            return ui.p("No defense systems found")
+
+        if "subtype" not in df.columns:
+            return ui.p("No subtype data found")
+
+        counts = df.group_by("subtype").len().sort("len", descending=True).head(15)
+
+        if len(counts) == 0:
+            return ui.p("No subtypes found")
+
+        fig = px.bar(
+            counts.to_pandas(),
+            x="len",
+            y="subtype",
+            orientation="h",
+            labels={"len": "Count", "subtype": "Subtype"},
+            title="Top Defense System Subtypes",
+            color_discrete_sequence=[CHART_COLORS["secondary"]],
+        )
+        fig.update_layout(
+            height=400,
+            yaxis={"categoryorder": "total ascending"},
+            margin=dict(l=150),
+            plot_bgcolor=CHART_COLORS["background"],
+        )
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    @render.data_frame
+    def defense_systems_table():
+        df = defensefinder_systems()
+        if df is None or len(df) == 0:
+            return None
+        return render.DataTable(df.to_pandas(), filters=True, height="400px")
+
+    @render.data_frame
+    def defense_genes_table():
+        df = defensefinder_genes()
+        if df is None or len(df) == 0:
+            return None
+        return render.DataTable(df.to_pandas(), filters=True, height="400px")
+
+    # Download handler
+    @render.download(filename="blast_results_filtered.csv")
+    def download_blast():
+        df = filtered_blast_data()
+        if df is not None:
+            return df.write_csv()
+        return ""
+
+    # ==================== Locus Viewer Tab ====================
+
+    # Update contig selector based on filter type
+    @reactive.effect
+    def _update_locus_contigs():
+        filter_type = input.locus_filter_type()
+        orfs = orf_data()
+        blast = blast_data()
+        defense_genes = defensefinder_genes()
+
+        if orfs is None or len(orfs) == 0:
+            ui.update_select("locus_contig_select", choices=["No contigs available"])
+            return
+
+        if filter_type == "hits":
+            contigs = get_contigs_with_hits(orfs, blast)
+            if not contigs:
+                contigs = ["No contigs with hits"]
+        elif filter_type == "defense":
+            contigs = get_contigs_with_defense(orfs, defense_genes)
+            if not contigs:
+                contigs = ["No contigs with defense systems"]
+        else:
+            contigs = get_contig_choices(orfs)
+
+        if contigs:
+            ui.update_select("locus_contig_select", choices=contigs, selected=contigs[0])
+
+    @reactive.calc
+    def selected_contig_orfs():
+        """Get ORFs for the selected contig."""
+        orfs = orf_data()
+        contig_id = input.locus_contig_select()
+
+        if orfs is None or not contig_id or contig_id.startswith("No "):
+            return None
+
+        return orfs.filter(pl.col("contig") == contig_id)
+
+    @render.text
+    def locus_title():
+        contig_id = input.locus_contig_select()
+        if contig_id and not contig_id.startswith("No "):
+            return f"Locus View: {contig_id}"
+        return "Locus Viewer"
+
+    @render.ui
+    def locus_color_legend():
+        return ui.HTML(create_color_legend_html())
+
+    @render.ui
+    def locus_viewer_plot():
+        orfs = orf_data()
+        contig_id = input.locus_contig_select()
+
+        if orfs is None or not contig_id or contig_id.startswith("No "):
+            return ui.p("Select a contig to view its locus structure.")
+
+        # Get annotation data
+        mapping = hit_to_contig_mapping()
+        interproscan = interproscan_data()
+        defense_genes = defensefinder_genes()
+        cotx = cotx_data()
+
+        # Get downstream ORF IDs
+        downstream_orfs = None
+        if cotx is not None and len(cotx) > 0:
+            downstream_orfs = cotx["downstream_orf"].to_list()
+
+        # Create locus figure
+        fig = create_locus_figure(
+            orfs=orfs,
+            contig_id=contig_id,
+            hit_to_contig_mapping=mapping,
+            interproscan=interproscan,
+            defensefinder_genes=defense_genes,
+            downstream_orfs=downstream_orfs,
+            height=350,
+        )
+
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    @render.data_frame
+    def locus_orf_table():
+        contig_orfs = selected_contig_orfs()
+        if contig_orfs is None or len(contig_orfs) == 0:
+            return None
+
+        return render.DataTable(
+            contig_orfs.to_pandas(),
+            filters=True,
+            height="300px"
+        )
+
+    # ==================== Defense Locus Viewer ====================
+
+    @reactive.effect
+    def _update_defense_contigs():
+        orfs = orf_data()
+        defense_genes = defensefinder_genes()
+
+        contigs = get_contigs_with_defense(orfs, defense_genes)
+        if contigs:
+            ui.update_select("defense_contig_select", choices=contigs, selected=contigs[0])
+        else:
+            ui.update_select("defense_contig_select", choices=["No contigs with defense systems"])
+
+    @render.ui
+    def defense_system_info():
+        contig_id = input.defense_contig_select()
+        defense_genes = defensefinder_genes()
+
+        if not contig_id or contig_id.startswith("No ") or defense_genes is None:
+            return ui.p("No defense systems found.")
+
+        # Count defense genes in this contig
+        orfs = orf_data()
+        if orfs is None:
+            return ui.p("No data available.")
+
+        defense_gene_ids = set(defense_genes["hit_id"].to_list())
+        contig_orfs = orfs.filter(pl.col("contig") == contig_id)
+
+        defense_count = sum(1 for row in contig_orfs.iter_rows(named=True)
+                          if row["orf_id"] in defense_gene_ids)
+
+        return ui.tags.div(
+            ui.tags.p(f"Defense genes in contig: {defense_count}"),
+            ui.tags.p(f"Total ORFs: {len(contig_orfs)}"),
+        )
+
+    @render.ui
+    def defense_locus_plot():
+        orfs = orf_data()
+        contig_id = input.defense_contig_select()
+        defense_genes = defensefinder_genes()
+        defense_systems = defensefinder_systems()
+
+        if orfs is None or not contig_id or contig_id.startswith("No "):
+            return ui.p("Select a contig to view defense system locus.")
+
+        if defense_genes is None or len(defense_genes) == 0:
+            return ui.p("No defense genes found. Run DefenseFinder to annotate defense systems.")
+
+        fig = create_defense_locus_figure(
+            orfs=orfs,
+            contig_id=contig_id,
+            defensefinder_genes=defense_genes,
+            defensefinder_systems=defense_systems,
+            height=350,
+        )
+
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+
+app = App(app_ui, server)
