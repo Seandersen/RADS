@@ -20,7 +20,25 @@ else:
     GENOMES_PATH = config["genomes_path"]
 
 
-# Checkpoint to discover genomes dynamically
+# =============================================================================
+# IMPORTANT: rule all MUST be the first rule to be the default target
+# =============================================================================
+rule all:
+    """Final target rule - requests outputs from all phases."""
+    input:
+        # Phase 1 outputs (steps 1-4)
+        f"results/{SAMPLE}/blast_results/master_blast.txt",
+        # Phase 2 outputs (steps 5-7)
+        f"results/{SAMPLE}/interproscan_results.tsv",
+        f"results/{SAMPLE}/cotranscription/cotranscribed_sequences.faa",
+        # Phase 3 outputs (DefenseFinder and metrics)
+        f"results/{SAMPLE}/defensefinder/defense_finder_systems.tsv",
+        f"results/{SAMPLE}/metrics/pipeline_metrics.json",
+
+
+# =============================================================================
+# Checkpoint and helper functions for dynamic genome discovery
+# =============================================================================
 checkpoint discover_genomes:
     """Discover all genome directories after staging."""
     input:
@@ -61,20 +79,9 @@ def get_all_contigs(wildcards):
     )
 
 
-# Final target rule
-rule all:
-    input:
-        # Phase 1 outputs (steps 1-4)
-        f"results/{SAMPLE}/blast_results/master_blast.txt",
-        # Phase 2 outputs (steps 5-7)
-        f"results/{SAMPLE}/interproscan_results.tsv",
-        f"results/{SAMPLE}/cotranscription/cotranscribed_sequences.faa",
-        # Phase 3 outputs (DefenseFinder and metrics)
-        f"results/{SAMPLE}/defensefinder/defense_finder_systems.tsv",
-        f"results/{SAMPLE}/metrics/pipeline_metrics.json",
-
-
+# =============================================================================
 # Include rule modules
+# =============================================================================
 # Phase 1: Core pipeline
 include: "workflow/rules/download_genomes.smk"
 include: "workflow/rules/stage_genomes.smk"

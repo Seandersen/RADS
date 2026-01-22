@@ -6,6 +6,15 @@ import re
 from pathlib import Path
 
 
+def get_all_translated_files(wildcards):
+    """Get all translated protein files for the mapping rule."""
+    genomes = get_all_genomes(wildcards)
+    return expand(
+        f"results/{SAMPLE}/translated/{{genome}}.faa",
+        genome=genomes
+    )
+
+
 rule map_blast_hits_to_contig_orfs:
     """
     Map original BLAST hits to their corresponding ORFs in the extracted contigs
@@ -14,7 +23,7 @@ rule map_blast_hits_to_contig_orfs:
     input:
         master_blast = f"results/{SAMPLE}/blast_results/master_blast.txt",
         contig_orfs = f"results/{SAMPLE}/contig_orfs/all_contigs.faa",
-        translated_dir = f"results/{SAMPLE}/translated"
+        translated_files = get_all_translated_files
     output:
         mapping = f"results/{SAMPLE}/cotranscription/hit_to_contig_mapping.tsv"
     log:
@@ -44,11 +53,17 @@ rule map_blast_hits_to_contig_orfs:
 
             logfile.write(f"Found BLAST hits in {len(blast_hits)} genomes\n")
 
+            # Build lookup of translated files by genome ID
+            translated_lookup = {}
+            for tf in input.translated_files:
+                genome_id = os.path.basename(tf).replace('.faa', '')
+                translated_lookup[genome_id] = tf
+
             # Get coordinates for each BLAST hit from translated genome files
             hit_coords = {}  # subject_id -> (start, stop, strand)
             for genome, hits in blast_hits.items():
-                translated_file = os.path.join(input.translated_dir, f"{genome}.faa")
-                if os.path.exists(translated_file):
+                translated_file = translated_lookup.get(genome)
+                if translated_file and os.path.exists(translated_file):
                     orf_nums_needed = {h['orf_num'] for h in hits}
                     with open(translated_file) as f:
                         for line in f:

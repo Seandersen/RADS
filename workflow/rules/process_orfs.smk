@@ -67,9 +67,12 @@ rule run_interproscan:
         "../envs/interproscan.yaml"
     shell:
         """
+        # Expand tilde in path
+        INTERPROSCAN_PATH=$(eval echo {params.interproscan_path})
+
         if [ "{params.enabled}" = "True" ] || [ "{params.enabled}" = "true" ]; then
-            if [ -s {input.proteins} ] && [ -x "{params.interproscan_path}" ]; then
-                bash {params.interproscan_path} \
+            if [ -s {input.proteins} ] && [ -x "$INTERPROSCAN_PATH" ]; then
+                bash "$INTERPROSCAN_PATH" \
                     -i {input.proteins} \
                     -f tsv \
                     -o {output.results} \
@@ -77,7 +80,7 @@ rule run_interproscan:
                     2>&1 | tee {log}
             else
                 touch {output.results}
-                echo "InterProScan not found or empty input, creating empty output" >> {log}
+                echo "InterProScan not found at $INTERPROSCAN_PATH or empty input, creating empty output" >> {log}
             fi
         else
             touch {output.results}
