@@ -39,6 +39,10 @@ diamond:
 interproscan:
   enabled: false
   path: ""  # Set to your InterProScan installation path if enabled
+  # Which analyses to run (comma-separated). Default: Pfam only for reliability.
+  # Options: Pfam, TIGRFAM, SMART, CDD, SUPERFAMILY, Gene3D, Coils, ProSiteProfiles
+  # Avoid: MobiDBLite, Panther (often have binary/dependency issues)
+  applications: "Pfam"
 
 # Co-transcription analysis
 cotranscription:

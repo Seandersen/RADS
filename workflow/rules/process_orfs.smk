@@ -53,6 +53,7 @@ rule run_interproscan:
     """
     Run InterProScan for domain annotation.
     Requires InterProScan to be installed manually.
+    Only runs Pfam analysis by default (most reliable, avoids MobiDB/Panther issues).
     """
     input:
         proteins = f"results/{SAMPLE}/contig_orfs/interproscan_input.faa"
@@ -60,7 +61,10 @@ rule run_interproscan:
         results = f"results/{SAMPLE}/interproscan_results.tsv"
     params:
         interproscan_path = config["interproscan"]["path"],
-        enabled = config["interproscan"]["enabled"]
+        enabled = config["interproscan"]["enabled"],
+        # Specify which analyses to run (default: Pfam only for reliability)
+        # Other options: CDD, TIGRFAM, SMART, SUPERFAMILY, Gene3D
+        applications = config.get("interproscan", {}).get("applications", "Pfam")
     log:
         f"logs/{SAMPLE}/interproscan.log"
     conda:
@@ -76,7 +80,7 @@ rule run_interproscan:
                     -i {input.proteins} \
                     -f tsv \
                     -o {output.results} \
-                    -exclappl PRINTS \
+                    -appl {params.applications} \
                     2>&1 | tee {log}
             else
                 touch {output.results}
