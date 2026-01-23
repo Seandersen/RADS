@@ -169,6 +169,32 @@ defensefinder:
      path: "/absolute/path/to/interproscan.sh"  # Not relative
    ```
 
+### InterProScan Binary Errors (MobiDB, Panther, ProSiteProfiles)
+
+**Symptom:** Errors like `FileNotFoundError: bin/panther/epa-ng` or `Error running prosite binary`
+
+**Cause:** Some InterProScan analyses have binary dependencies that fail on certain systems, especially HPC clusters.
+
+**Solution:** Configure InterProScan to run only Pfam (most reliable):
+
+```yaml
+# config/config.yaml
+interproscan:
+  enabled: true
+  path: "/path/to/interproscan.sh"
+  applications: "Pfam"  # Only run Pfam analysis
+```
+
+Safe analyses to include: `Pfam`, `CDD`, `TIGRFAM`
+
+Avoid these (often fail): `MobiDBLite`, `Panther`, `ProSiteProfiles`
+
+**Rerun after fixing:**
+```bash
+rm -f results/{sample}/interproscan_results.tsv
+snakemake --cores 8 --use-conda --forcerun run_interproscan
+```
+
 ### Out of Memory
 
 **Symptom:** Jobs killed with memory errors
@@ -357,6 +383,69 @@ When reporting issues, include:
 
 File issues at: https://github.com/Seandersen/RADS/issues
 
+## HPC / Supercomputer Issues
+
+### Symlink Errors on Network Filesystem
+
+**Symptom:** `[Errno 95] Operation not supported: 'cacert.pem' -> ...`
+
+**Cause:** Network filesystems (NFS, Lustre, CIFS) don't support symbolic links, which conda uses by default.
+
+**Solution:**
+
+1. **Configure conda to copy instead of symlink:**
+   ```bash
+   conda config --set always_copy true
+   ```
+
+2. **Store conda environments on local disk:**
+   ```bash
+   # Clean failed environments
+   rm -rf .snakemake/conda/*
+
+   # Run with local conda prefix
+   snakemake --cores 20 --use-conda --conda-prefix /tmp/$USER/snakemake_conda
+   ```
+
+### Dashboard Access from Remote Server
+
+**Symptom:** Dashboard runs but can't access in browser
+
+**Cause:** The dashboard is running on remote server, not your local machine.
+
+**Solution:** Create an SSH tunnel from your local machine:
+
+```bash
+# On your LOCAL machine, open a new terminal:
+ssh -L 8000:localhost:8000 username@remote-server
+
+# Then open http://localhost:8000 in your local browser
+```
+
+### Missing pyarrow
+
+**Symptom:** `ModuleNotFoundError: No module named 'pyarrow'`
+
+**Solution:**
+```bash
+pip install pyarrow
+```
+
+### Running Dashboard Without Pixi
+
+If pixi isn't available on your HPC system:
+
+```bash
+# Create conda environment
+conda create -n rads-dashboard python=3.10 -c conda-forge -y
+conda activate rads-dashboard
+pip install shiny polars plotly pandas pyarrow
+
+# Run dashboard
+cd /path/to/RADS
+shiny run dashboard/app.py --port 8000
+```
+
 ## Common Error Messages
 
 | Error | Cause | Solution |
@@ -366,3 +455,5 @@ File issues at: https://github.com/Seandersen/RADS/issues
 | `MissingInputException` | Required input file missing | Run prerequisite rules first |
 | `WorkflowError: Conda environment file cannot be found` | Missing env file | Check workflow/envs/ exists |
 | `command not found: diamond` | Tool not in PATH | Run via `pixi run snakemake` |
+| `[Errno 95] Operation not supported` | Network filesystem symlink issue | Use `--conda-prefix` with local path |
+| `FileNotFoundError: bin/panther/epa-ng` | InterProScan binary missing | Use `applications: "Pfam"` in config |

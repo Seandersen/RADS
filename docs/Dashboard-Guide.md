@@ -4,6 +4,8 @@ The RADS Results Explorer is an interactive web dashboard for visualizing and ex
 
 ## Starting the Dashboard
 
+### With Pixi (Local Machine)
+
 ```bash
 pixi run dashboard
 ```
@@ -13,6 +15,54 @@ Then open http://localhost:8000 in your web browser.
 **Custom port:**
 ```bash
 pixi run shiny run dashboard/app.py --port 9000
+```
+
+### Without Pixi (HPC / Remote Servers)
+
+If pixi isn't available, install dependencies with conda/pip:
+
+```bash
+# Create environment (one-time setup)
+conda create -n rads-dashboard python=3.10 -c conda-forge -y
+conda activate rads-dashboard
+pip install shiny polars plotly pandas pyarrow
+
+# Run dashboard
+shiny run dashboard/app.py --port 8000
+```
+
+### Remote Access via SSH Tunnel
+
+When running on a remote server (HPC, cloud, etc.), you need an SSH tunnel to access the dashboard in your local browser.
+
+**Step 1:** Start the dashboard on the remote server:
+```bash
+shiny run dashboard/app.py --port 8000
+```
+
+**Step 2:** On your **local machine**, create an SSH tunnel (new terminal):
+```bash
+ssh -L 8000:localhost:8000 username@remote-server
+```
+
+**Step 3:** Open http://localhost:8000 in your local browser.
+
+### Keep Dashboard Running (screen/tmux)
+
+To keep the dashboard running after disconnecting from SSH:
+
+```bash
+# Start a screen session
+screen -S dashboard
+
+# Run the dashboard
+shiny run dashboard/app.py --port 8000
+
+# Detach from screen: press Ctrl+A, then D
+# The dashboard keeps running in the background
+
+# Reattach later:
+screen -r dashboard
 ```
 
 ## Dashboard Overview
