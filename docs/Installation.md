@@ -101,44 +101,110 @@ conda env create -f environment.yaml
 conda activate rads
 ```
 
-### Step 3: Run Pipeline
+### Step 3: Install Additional Dependencies
+
+Install DefenseFinder and other tools directly in the rads environment:
+
+```bash
+conda activate rads
+
+# Install DefenseFinder (required for defense system detection)
+pip install mdmparis-defense-finder
+
+# Update DefenseFinder models
+defense-finder update
+
+# Verify installation
+defense-finder --version
+macsydata list
+```
+
+### Step 4: Run Pipeline
+
+**Option A: Simple (recommended for most users)**
+
+Run without `--use-conda` to use your rads environment directly:
+
+```bash
+conda activate rads
+snakemake --cores 8
+```
+
+This is simpler and avoids environment creation issues.
+
+**Option B: Isolated environments**
+
+Use `--use-conda` to have Snakemake create isolated environments for each rule:
 
 ```bash
 snakemake --cores 8 --use-conda
 ```
 
-**Note**: When using `--use-conda`, Snakemake creates isolated environments for each rule. Mamba will be used automatically if available, significantly speeding up environment creation.
+**Note**: When using `--use-conda`, Snakemake creates separate conda environments for each rule. This can cause issues if DefenseFinder models aren't properly installed in each environment. Option A is recommended for simplicity.
 
 ## Method 3: HPC / Supercomputer Installation
 
-When running on shared computing clusters or supercomputers, you may encounter issues with network filesystems. Follow these additional steps:
+When running on shared computing clusters or supercomputers, we recommend installing all dependencies in a single conda environment and running **without** `--use-conda`. This avoids network filesystem issues and ensures DefenseFinder models are properly available.
 
-### Configure Conda for Network Filesystems
-
-Network filesystems (NFS, CIFS, Lustre) often don't support symbolic links. Configure conda to copy files instead:
+### Step 1: Configure Conda for Network Filesystems
 
 ```bash
 conda config --set always_copy true
 conda config --set channel_priority strict
 ```
 
-### Use Local Storage for Conda Environments
-
-Snakemake creates conda environments for each rule. Store these on local disk (not network storage) to avoid symlink errors:
+### Step 2: Create and Setup Environment
 
 ```bash
-# Create a local directory for conda environments
-mkdir -p /tmp/$USER/snakemake_conda
+git clone https://github.com/Seandersen/RADS.git
+cd RADS
+git checkout snakemake-pipeline
 
-# Run with --conda-prefix pointing to local storage
+# Create environment
+conda env create -f environment.yaml
+conda activate rads
+
+# Install DefenseFinder
+pip install mdmparis-defense-finder
+
+# Update DefenseFinder models
+defense-finder update
+
+# Verify
+defense-finder --version
+macsydata list
+```
+
+### Step 3: Run Pipeline (Recommended Method)
+
+Run **without** `--use-conda` to use your rads environment directly:
+
+```bash
+conda activate rads
+snakemake --cores 20
+```
+
+This is the **recommended approach for HPC** because:
+- Avoids symlink issues on network filesystems
+- DefenseFinder models are properly available
+- No need to manage multiple conda environments
+- Simpler and more reliable
+
+### Alternative: Using --use-conda on HPC
+
+If you must use `--use-conda`, store environments on local disk:
+
+```bash
+mkdir -p /tmp/$USER/snakemake_conda
 snakemake --cores 20 --use-conda --conda-prefix /tmp/$USER/snakemake_conda
 ```
+
+**Note**: With `--use-conda`, you may need to manually install DefenseFinder models in each Snakemake-created environment, which can be error-prone.
 
 Common local storage paths on HPC systems:
 - `/tmp/$USER/`
 - `/scratch/$USER/`
 - `/local/$USER/`
-- `$HOME/.snakemake/conda` (if home is on local disk)
 
 ### Example HPC Run Command
 

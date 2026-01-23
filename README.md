@@ -45,9 +45,9 @@ git checkout snakemake-pipeline
 pixi install
 ```
 
-### Alternative: Using Mamba/Conda
+### Alternative: Using Mamba/Conda (Recommended for HPC)
 
-If you prefer mamba (recommended over conda for faster dependency resolution):
+If you prefer mamba/conda (recommended for HPC and remote servers):
 
 ```bash
 # Install mamba if not already installed
@@ -57,9 +57,15 @@ conda install -n base -c conda-forge mamba
 mamba env create -f environment.yaml
 conda activate rads
 
-# Run pipeline with conda environments
-snakemake --cores 8 --use-conda
+# Install DefenseFinder
+pip install mdmparis-defense-finder
+defense-finder update
+
+# Run pipeline (no --use-conda needed)
+snakemake --cores 8
 ```
+
+**Note**: Running without `--use-conda` uses your active environment directly, which is simpler and ensures DefenseFinder models are available.
 
 ### 3. Configure
 
