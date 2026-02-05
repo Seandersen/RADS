@@ -15,7 +15,8 @@ rule blast_search:
     params:
         identity = config["diamond"]["identity"],
         threads = config["diamond"]["threads"],
-        max_target_seqs = config["diamond"]["max_target_seqs"]
+        max_target_seqs = config["diamond"]["max_target_seqs"],
+        block_size = config["diamond"].get("block_size", 0)
     log:
         f"logs/{SAMPLE}/blast/{{genome}}.log"
     benchmark:
@@ -32,6 +33,12 @@ rule blast_search:
                 MAX_TARGETS_OPT="--max-target-seqs {params.max_target_seqs}"
             fi
 
+            # Build block_size option only if > 0
+            BLOCK_SIZE_OPT=""
+            if [ {params.block_size} -gt 0 ]; then
+                BLOCK_SIZE_OPT="--block-size {params.block_size}"
+            fi
+
             diamond blastp \
                 -d {input.db} \
                 --query {input.query} \
@@ -39,6 +46,7 @@ rule blast_search:
                 --out {output.hits} \
                 --outfmt 6 qseqid sseqid length nident pident evalue \
                 $MAX_TARGETS_OPT \
+                $BLOCK_SIZE_OPT \
                 --id {params.identity} \
                 2>&1 | tee {log}
         else

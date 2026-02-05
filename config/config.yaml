@@ -34,6 +34,7 @@ diamond:
   identity: 30           # Minimum percent identity
   threads: 8             # Number of threads
   max_target_seqs: 0     # 0 = no limit
+  block_size: 2          # Memory block size in GB (lower = less memory, 0 = default)
 
 # InterProScan settings (requires manual installation)
 interproscan:
