@@ -40,35 +40,35 @@ DOMAIN_COLORS = {
 }
 
 DEFENSE_SYSTEM_COLORS = {
-    # DefenseFinder system types - distinctive colors for visibility
-    # Using more saturated/contrasting colors to distinguish from other genes
-    "RM": "#c0392b",           # Restriction-Modification (red)
-    "CRISPR": "#2980b9",       # CRISPR-Cas (blue)
-    "Abi": "#8e44ad",          # Abortive infection (purple)
-    "TA": "#d35400",           # Toxin-Antitoxin (orange)
-    "BREX": "#27ae60",         # BREX (green)
-    "DISARM": "#16a085",       # DISARM (teal)
-    "Gabija": "#e74c3c",       # Gabija (light red)
-    "Hachiman": "#3498db",     # Hachiman (light blue)
-    "Lamassu": "#9b59b6",      # Lamassu (light purple)
-    "Lamassu-Fam": "#9b59b6",  # Lamassu family (light purple)
-    "Thoeris": "#f39c12",      # Thoeris (yellow-orange)
-    "Zorya": "#1abc9c",        # Zorya (turquoise)
-    "Druantia": "#e67e22",     # Druantia (carrot orange)
-    "Kiwa": "#2ecc71",         # Kiwa (emerald)
-    "Wadjet": "#34495e",       # Wadjet (wet asphalt)
-    "Septu": "#95a5a6",        # Septu (concrete)
-    "RosmerTA": "#c0392b",     # RosmerTA (red - TA system)
-    "MazEF": "#d35400",        # MazEF (orange - TA system)
-    "PD-Lambda-1": "#8e44ad",  # PD-Lambda (purple)
-    "Dodola": "#27ae60",       # Dodola (green)
-    "AbiH": "#2980b9",         # AbiH (blue)
-    "AbiC": "#3498db",         # AbiC (light blue)
-    "AbiJ": "#1abc9c",         # AbiJ (turquoise)
-    "AbiE": "#16a085",         # AbiE (teal)
-    "PrrC": "#e74c3c",         # PrrC (light red)
-    "RloC": "#f39c12",         # RloC (yellow-orange)
-    "default_defense": "#e74c3c",  # Default: light red for visibility
+    # DefenseFinder system types - navy blue color scheme
+    # Matching the antiphage/defense system biology figure aesthetic
+    "RM": "#1a3a4a",           # Restriction-Modification (darkest navy)
+    "CRISPR": "#234b5e",       # CRISPR-Cas (dark navy)
+    "Abi": "#2c5d73",          # Abortive infection (navy)
+    "TA": "#1a3a4a",           # Toxin-Antitoxin (darkest navy)
+    "BREX": "#356f88",         # BREX (medium navy)
+    "DISARM": "#3e819d",       # DISARM (navy-teal)
+    "Gabija": "#2c5d73",       # Gabija (navy)
+    "Hachiman": "#234b5e",     # Hachiman (dark navy)
+    "Lamassu": "#356f88",      # Lamassu (medium navy)
+    "Lamassu-Fam": "#356f88",  # Lamassu family (medium navy)
+    "Thoeris": "#3e819d",      # Thoeris (navy-teal)
+    "Zorya": "#2c5d73",        # Zorya (navy)
+    "Druantia": "#234b5e",     # Druantia (dark navy)
+    "Kiwa": "#356f88",         # Kiwa (medium navy)
+    "Wadjet": "#1a3a4a",       # Wadjet (darkest navy)
+    "Septu": "#3e819d",        # Septu (navy-teal)
+    "RosmerTA": "#1a3a4a",     # RosmerTA (darkest navy - TA system)
+    "MazEF": "#234b5e",        # MazEF (dark navy - TA system)
+    "PD-Lambda-1": "#2c5d73",  # PD-Lambda (navy)
+    "Dodola": "#356f88",       # Dodola (medium navy)
+    "AbiH": "#234b5e",         # AbiH (dark navy)
+    "AbiC": "#2c5d73",         # AbiC (navy)
+    "AbiJ": "#356f88",         # AbiJ (medium navy)
+    "AbiE": "#3e819d",         # AbiE (navy-teal)
+    "PrrC": "#1a3a4a",         # PrrC (darkest navy)
+    "RloC": "#234b5e",         # RloC (dark navy)
+    "default_defense": "#2c5d73",  # Default: navy blue
 }
 
 # Special colors - teal theme
@@ -86,10 +86,13 @@ def create_gene_arrow(
     label: str = "",
     hover_text: str = "",
     arrow_height: float = 0.4,
-    arrow_head_width: float = 0.15,
+    arrow_head_width: float = 0.12,
 ) -> dict:
     """
-    Create a gene arrow shape for Plotly.
+    Create a boxarrow gene shape for Plotly.
+
+    Boxarrow style: rectangular body with a pointed arrow head at the end.
+    This creates a cleaner, more professional look similar to scientific figures.
 
     Args:
         x_start: Start position of gene
@@ -100,32 +103,34 @@ def create_gene_arrow(
         label: Gene label
         hover_text: Text to display on hover
         arrow_height: Height of arrow body
-        arrow_head_width: Relative width of arrow head
+        arrow_head_width: Relative width of arrow head (as fraction of gene length)
 
     Returns:
         Dictionary with shape and annotation data
     """
     gene_length = abs(x_end - x_start)
-    head_length = min(gene_length * arrow_head_width, gene_length * 0.3)
+    head_length = min(gene_length * arrow_head_width, gene_length * 0.25)
 
     half_height = arrow_height / 2
+    # Arrow head extends slightly beyond the box height for a pointed look
+    head_extension = half_height * 0.3
 
     if strand >= 0:  # Forward strand (left to right arrow)
-        # Arrow pointing right
+        # Boxarrow pointing right: rectangular body + triangular head
         path = f"M {x_start},{y_center - half_height} " \
                f"L {x_end - head_length},{y_center - half_height} " \
-               f"L {x_end - head_length},{y_center - half_height - 0.1} " \
+               f"L {x_end - head_length},{y_center - half_height - head_extension} " \
                f"L {x_end},{y_center} " \
-               f"L {x_end - head_length},{y_center + half_height + 0.1} " \
+               f"L {x_end - head_length},{y_center + half_height + head_extension} " \
                f"L {x_end - head_length},{y_center + half_height} " \
                f"L {x_start},{y_center + half_height} Z"
     else:  # Reverse strand (right to left arrow)
-        # Arrow pointing left
+        # Boxarrow pointing left: triangular head + rectangular body
         path = f"M {x_end},{y_center - half_height} " \
                f"L {x_start + head_length},{y_center - half_height} " \
-               f"L {x_start + head_length},{y_center - half_height - 0.1} " \
+               f"L {x_start + head_length},{y_center - half_height - head_extension} " \
                f"L {x_start},{y_center} " \
-               f"L {x_start + head_length},{y_center + half_height + 0.1} " \
+               f"L {x_start + head_length},{y_center + half_height + head_extension} " \
                f"L {x_start + head_length},{y_center + half_height} " \
                f"L {x_end},{y_center + half_height} Z"
 
@@ -568,7 +573,7 @@ def create_color_legend_html() -> str:
     legend_items = [
         (QUERY_HIT_COLOR, "Query Hit (Recombinase)"),
         (DOWNSTREAM_COLOR, "Co-transcribed Downstream"),
-        ("#e74c3c", "Defense System Gene"),  # Representative defense color
+        ("#2c5d73", "Defense System Gene"),  # Navy blue for defense systems
         (NO_ANNOTATION_COLOR, "No Annotation"),
     ]
 
