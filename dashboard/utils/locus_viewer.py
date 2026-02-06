@@ -86,13 +86,27 @@ def create_gene_arrow(
     label: str = "",
     hover_text: str = "",
     arrow_height: float = 0.4,
-    arrow_head_width: float = 0.12,
+    arrow_head_width: float = 0.15,
 ) -> dict:
     """
-    Create a boxarrow gene shape for Plotly.
+    Create a boxarrow gene shape for Plotly (geneviewer style).
 
-    Boxarrow style: rectangular body with a pointed arrow head at the end.
-    This creates a cleaner, more professional look similar to scientific figures.
+    Boxarrow style: a pentagon shape with a rectangular body and the end
+    converging to a point. The arrow head stays within the same height as
+    the body (no extension beyond). This matches the geneviewer R package
+    boxarrow marker style.
+
+    Shape for forward strand (+):
+        _______________
+       |               \\
+       |                >
+       |_______________/
+
+    Shape for reverse strand (-):
+         _______________
+        /               |
+       <                |
+        \\_______________|
 
     Args:
         x_start: Start position of gene
@@ -109,28 +123,24 @@ def create_gene_arrow(
         Dictionary with shape and annotation data
     """
     gene_length = abs(x_end - x_start)
-    head_length = min(gene_length * arrow_head_width, gene_length * 0.25)
+    head_length = min(gene_length * arrow_head_width, gene_length * 0.3)
 
     half_height = arrow_height / 2
-    # Arrow head extends slightly beyond the box height for a pointed look
-    head_extension = half_height * 0.3
 
     if strand >= 0:  # Forward strand (left to right arrow)
-        # Boxarrow pointing right: rectangular body + triangular head
+        # Pentagon boxarrow pointing right
+        # 5 points: top-left -> top-right (before head) -> point -> bottom-right (before head) -> bottom-left
         path = f"M {x_start},{y_center - half_height} " \
                f"L {x_end - head_length},{y_center - half_height} " \
-               f"L {x_end - head_length},{y_center - half_height - head_extension} " \
                f"L {x_end},{y_center} " \
-               f"L {x_end - head_length},{y_center + half_height + head_extension} " \
                f"L {x_end - head_length},{y_center + half_height} " \
                f"L {x_start},{y_center + half_height} Z"
     else:  # Reverse strand (right to left arrow)
-        # Boxarrow pointing left: triangular head + rectangular body
+        # Pentagon boxarrow pointing left
+        # 5 points: top-right -> top-left (after head) -> point -> bottom-left (after head) -> bottom-right
         path = f"M {x_end},{y_center - half_height} " \
                f"L {x_start + head_length},{y_center - half_height} " \
-               f"L {x_start + head_length},{y_center - half_height - head_extension} " \
                f"L {x_start},{y_center} " \
-               f"L {x_start + head_length},{y_center + half_height + head_extension} " \
                f"L {x_start + head_length},{y_center + half_height} " \
                f"L {x_end},{y_center + half_height} Z"
 
