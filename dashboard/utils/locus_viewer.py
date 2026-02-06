@@ -40,23 +40,35 @@ DOMAIN_COLORS = {
 }
 
 DEFENSE_SYSTEM_COLORS = {
-    # DefenseFinder system types - teal/slate themed
-    "RM": "#2d4a4a",           # Restriction-Modification (darkest teal)
-    "CRISPR": "#3d5a5a",       # CRISPR-Cas (dark teal)
-    "Abi": "#4a6670",          # Abortive infection (slate)
-    "TA": "#5a7a7a",           # Toxin-Antitoxin (medium teal)
-    "BREX": "#6b9090",         # BREX (medium-light teal)
-    "DISARM": "#7a9e9e",       # DISARM (light teal)
-    "Gabija": "#8fb3b3",       # Gabija (lighter teal)
-    "Hachiman": "#4a6670",     # Hachiman (slate)
-    "Lamassu": "#5a7a7a",      # Lamassu (medium teal)
-    "Thoeris": "#6b9090",      # Thoeris (medium-light teal)
-    "Zorya": "#3d5a5a",        # Zorya (dark teal)
-    "Druantia": "#7a9e9e",     # Druantia (light teal)
-    "Kiwa": "#8fb3b3",         # Kiwa (lighter teal)
-    "Wadjet": "#a8c4c4",       # Wadjet (light sage)
-    "Septu": "#b5cece",        # Septu (pale sage)
-    "default_defense": "#b5cece",
+    # DefenseFinder system types - distinctive colors for visibility
+    # Using more saturated/contrasting colors to distinguish from other genes
+    "RM": "#c0392b",           # Restriction-Modification (red)
+    "CRISPR": "#2980b9",       # CRISPR-Cas (blue)
+    "Abi": "#8e44ad",          # Abortive infection (purple)
+    "TA": "#d35400",           # Toxin-Antitoxin (orange)
+    "BREX": "#27ae60",         # BREX (green)
+    "DISARM": "#16a085",       # DISARM (teal)
+    "Gabija": "#e74c3c",       # Gabija (light red)
+    "Hachiman": "#3498db",     # Hachiman (light blue)
+    "Lamassu": "#9b59b6",      # Lamassu (light purple)
+    "Lamassu-Fam": "#9b59b6",  # Lamassu family (light purple)
+    "Thoeris": "#f39c12",      # Thoeris (yellow-orange)
+    "Zorya": "#1abc9c",        # Zorya (turquoise)
+    "Druantia": "#e67e22",     # Druantia (carrot orange)
+    "Kiwa": "#2ecc71",         # Kiwa (emerald)
+    "Wadjet": "#34495e",       # Wadjet (wet asphalt)
+    "Septu": "#95a5a6",        # Septu (concrete)
+    "RosmerTA": "#c0392b",     # RosmerTA (red - TA system)
+    "MazEF": "#d35400",        # MazEF (orange - TA system)
+    "PD-Lambda-1": "#8e44ad",  # PD-Lambda (purple)
+    "Dodola": "#27ae60",       # Dodola (green)
+    "AbiH": "#2980b9",         # AbiH (blue)
+    "AbiC": "#3498db",         # AbiC (light blue)
+    "AbiJ": "#1abc9c",         # AbiJ (turquoise)
+    "AbiE": "#16a085",         # AbiE (teal)
+    "PrrC": "#e74c3c",         # PrrC (light red)
+    "RloC": "#f39c12",         # RloC (yellow-orange)
+    "default_defense": "#e74c3c",  # Default: light red for visibility
 }
 
 # Special colors - teal theme
@@ -556,6 +568,7 @@ def create_color_legend_html() -> str:
     legend_items = [
         (QUERY_HIT_COLOR, "Query Hit (Recombinase)"),
         (DOWNSTREAM_COLOR, "Co-transcribed Downstream"),
+        ("#e74c3c", "Defense System Gene"),  # Representative defense color
         (NO_ANNOTATION_COLOR, "No Annotation"),
     ]
 

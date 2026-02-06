@@ -222,38 +222,84 @@ def load_defensefinder_systems(results_dir: str) -> Optional[pl.DataFrame]:
     """
     Load DefenseFinder defense systems results.
 
-    Returns DataFrame with columns for defense system information.
+    Handles the macsyfinder output format which includes:
+    - Comment lines starting with #
+    - Multiple header rows (repeated for each system block)
+    - Columns: replicon, hit_id, gene_name, hit_pos, model_fqn, sys_id, etc.
+
+    Returns DataFrame with columns for defense system information including
+    type and subtype extracted from model_fqn.
     """
     systems_file = Path(results_dir) / "defensefinder" / "defense_finder_systems.tsv"
     if not systems_file.exists():
         return None
 
     try:
-        # Check if file has content beyond header
+        # Check if file has content
         if systems_file.stat().st_size == 0:
             return pl.DataFrame({
                 "sys_id": [],
                 "type": [],
                 "subtype": [],
-                "genes_count": [],
+                "hit_id": [],
+                "gene_name": [],
             })
 
-        df = pl.read_csv(
-            systems_file,
-            separator="\t",
-            has_header=True,
-        )
+        # Read file manually to handle comments and multiple headers
+        rows = []
+        with open(systems_file) as f:
+            for line in f:
+                line = line.strip()
+                # Skip empty lines and comments
+                if not line or line.startswith("#"):
+                    continue
+                # Skip header lines (they start with "replicon")
+                if line.startswith("replicon\t"):
+                    continue
 
-        # Return empty dataframe if only header
-        if len(df) == 0:
+                parts = line.split("\t")
+                if len(parts) >= 6:
+                    # Extract type and subtype from model_fqn
+                    # Format: defense-finder-models/DefenseFinder/Lamassu-Fam/Lamassu-Protease
+                    # or: defense-finder-models/RM/RM/RM_Type_I
+                    model_fqn = parts[4] if len(parts) > 4 else ""
+                    fqn_parts = model_fqn.split("/")
+
+                    # Extract type (second-to-last part) and subtype (last part)
+                    if len(fqn_parts) >= 2:
+                        subtype = fqn_parts[-1] if fqn_parts[-1] else "Unknown"
+                        # Type is the category - simplify from the path
+                        if len(fqn_parts) >= 3:
+                            system_type = fqn_parts[-2]  # e.g., "Lamassu-Fam", "RM"
+                        else:
+                            system_type = subtype
+                    else:
+                        system_type = "Unknown"
+                        subtype = "Unknown"
+
+                    rows.append({
+                        "replicon": parts[0],
+                        "hit_id": parts[1],
+                        "gene_name": parts[2],
+                        "hit_pos": parts[3] if len(parts) > 3 else "",
+                        "model_fqn": model_fqn,
+                        "sys_id": parts[5] if len(parts) > 5 else "",
+                        "type": system_type,
+                        "subtype": subtype,
+                        "hit_status": parts[8] if len(parts) > 8 else "",
+                        "hit_score": parts[11] if len(parts) > 11 else "",
+                    })
+
+        if not rows:
             return pl.DataFrame({
                 "sys_id": [],
                 "type": [],
                 "subtype": [],
-                "genes_count": [],
+                "hit_id": [],
+                "gene_name": [],
             })
 
-        return df
+        return pl.DataFrame(rows)
     except Exception as e:
         print(f"Error loading DefenseFinder systems: {e}")
         return None
@@ -263,6 +309,7 @@ def load_defensefinder_genes(results_dir: str) -> Optional[pl.DataFrame]:
     """
     Load DefenseFinder defense genes results.
 
+    Handles the macsyfinder output format (same as systems file).
     Returns DataFrame with columns for defense gene information.
     """
     genes_file = Path(results_dir) / "defensefinder" / "defense_finder_genes.tsv"
@@ -278,13 +325,43 @@ def load_defensefinder_genes(results_dir: str) -> Optional[pl.DataFrame]:
                 "subtype": [],
             })
 
-        df = pl.read_csv(
-            genes_file,
-            separator="\t",
-            has_header=True,
-        )
+        # Read file manually to handle comments and multiple headers
+        rows = []
+        with open(genes_file) as f:
+            for line in f:
+                line = line.strip()
+                # Skip empty lines and comments
+                if not line or line.startswith("#"):
+                    continue
+                # Skip header lines
+                if line.startswith("replicon\t") or line.startswith("hit_id\t"):
+                    continue
 
-        if len(df) == 0:
+                parts = line.split("\t")
+                if len(parts) >= 3:
+                    # Extract type and subtype from model_fqn if present
+                    model_fqn = parts[4] if len(parts) > 4 else ""
+                    fqn_parts = model_fqn.split("/")
+
+                    if len(fqn_parts) >= 2:
+                        subtype = fqn_parts[-1] if fqn_parts[-1] else "Unknown"
+                        if len(fqn_parts) >= 3:
+                            system_type = fqn_parts[-2]
+                        else:
+                            system_type = subtype
+                    else:
+                        system_type = "Unknown"
+                        subtype = "Unknown"
+
+                    rows.append({
+                        "hit_id": parts[1] if len(parts) > 1 else parts[0],
+                        "gene_name": parts[2] if len(parts) > 2 else "",
+                        "type": system_type,
+                        "subtype": subtype,
+                        "sys_id": parts[5] if len(parts) > 5 else "",
+                    })
+
+        if not rows:
             return pl.DataFrame({
                 "hit_id": [],
                 "gene_name": [],
@@ -292,7 +369,7 @@ def load_defensefinder_genes(results_dir: str) -> Optional[pl.DataFrame]:
                 "subtype": [],
             })
 
-        return df
+        return pl.DataFrame(rows)
     except Exception as e:
         print(f"Error loading DefenseFinder genes: {e}")
         return None

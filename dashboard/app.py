@@ -586,35 +586,78 @@ def server(input, output, session):
 
     @render.text
     def stat_defense_systems():
-        metrics = pipeline_metrics()
-        if metrics:
-            return str(metrics.get("defense_systems", 0))
-        # Fallback to counting from defensefinder data
+        # First try to count from actual DefenseFinder data
         df = defensefinder_systems()
         if df is not None and len(df) > 0:
+            # Count unique system IDs
+            if "sys_id" in df.columns:
+                return str(df["sys_id"].n_unique())
             return str(len(df))
+        # Fallback to metrics file
+        metrics = pipeline_metrics()
+        if metrics and metrics.get("defense_systems", 0) > 0:
+            return str(metrics.get("defense_systems", 0))
         return "0"
 
     @render.text
     def stat_hits_per_mb():
         metrics = pipeline_metrics()
-        if metrics:
+        if metrics and metrics.get('hits_per_mb', 0) > 0:
             return f"{metrics.get('hits_per_mb', 0):.3f}"
+        # Calculate from data if not in metrics
+        stats = summary_stats()
+        if stats.get("total_genomes", 0) > 0:
+            # Rough estimate based on average genome size
+            blast_hits = stats.get("total_blast_hits", 0)
+            # Assume ~5 Mb average genome size
+            total_mb = stats.get("total_genomes", 0) * 5
+            if total_mb > 0:
+                return f"{blast_hits / total_mb:.3f}"
         return "N/A"
 
     @render.text
     def stat_discovery_per_contig():
+        # Calculate from actual data: defense systems per contig analyzed
+        df = defensefinder_systems()
+        stats = summary_stats()
+        contigs = stats.get("total_contigs", 0)
+
+        if df is not None and len(df) > 0 and contigs > 0:
+            # Count unique systems
+            if "sys_id" in df.columns:
+                unique_systems = df["sys_id"].n_unique()
+            else:
+                unique_systems = len(df)
+            rate = unique_systems / contigs
+            return f"{rate:.3f}"
+
+        # Fallback to metrics file
         metrics = pipeline_metrics()
-        if metrics:
+        if metrics and metrics.get('discovery_rate_per_contig', 0) > 0:
             return f"{metrics.get('discovery_rate_per_contig', 0):.3f}"
-        return "N/A"
+        return "0.000"
 
     @render.text
     def stat_discovery_per_genome():
+        # Calculate from actual data: proportion of genomes with defense systems
+        df = defensefinder_systems()
+        stats = summary_stats()
+        total_genomes = stats.get("total_genomes", 0)
+
+        if df is not None and len(df) > 0 and total_genomes > 0:
+            # Count unique contigs/genomes with defense systems
+            if "replicon" in df.columns:
+                # Each contig comes from a genome
+                contigs_with_defense = df["replicon"].n_unique()
+                # This is a rough proxy - contigs with defense / total genomes
+                rate = min(contigs_with_defense / total_genomes, 1.0)
+                return f"{rate:.3f}"
+
+        # Fallback to metrics file
         metrics = pipeline_metrics()
-        if metrics:
+        if metrics and metrics.get('discovery_rate_per_genome', 0) > 0:
             return f"{metrics.get('discovery_rate_per_genome', 0):.3f}"
-        return "N/A"
+        return "0.000"
 
     @render.ui
     def pipeline_status():
