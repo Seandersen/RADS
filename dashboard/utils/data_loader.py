@@ -397,6 +397,60 @@ def load_hit_to_contig_mapping(results_dir: str) -> Optional[pl.DataFrame]:
         return None
 
 
+def load_defense_scores(results_dir: str) -> Optional[pl.DataFrame]:
+    """
+    Load defense scores produced by defense_score.py.
+
+    Returns DataFrame with columns:
+    - downstream_orf, blast_hit_id, contig, orf_start, orf_stop, strand
+    - nearest_defense_gene, nearest_defense_type, nearest_distance_bp
+    - defense_genes_in_window, proximity_score, density_score, defense_score
+    - interpro_domains, has_significant_domain, significant_domains
+    """
+    scores_file = Path(results_dir) / "defense_scores.tsv"
+    if not scores_file.exists():
+        return None
+
+    try:
+        if scores_file.stat().st_size == 0:
+            return None
+
+        df = pl.read_csv(
+            scores_file,
+            separator="\t",
+            has_header=True,
+            infer_schema_length=0,  # read all as strings first
+        )
+
+        if len(df) == 0:
+            return None
+
+        # Cast numeric columns where possible (handle "NA" values)
+        for col in ["orf_start", "orf_stop", "strand", "nearest_distance_bp",
+                     "defense_genes_in_window"]:
+            if col in df.columns:
+                df = df.with_columns(
+                    pl.when(pl.col(col) == "NA")
+                    .then(None)
+                    .otherwise(pl.col(col).cast(pl.Int64, strict=False))
+                    .alias(col)
+                )
+
+        for col in ["proximity_score", "density_score", "defense_score"]:
+            if col in df.columns:
+                df = df.with_columns(
+                    pl.when(pl.col(col) == "NA")
+                    .then(None)
+                    .otherwise(pl.col(col).cast(pl.Float64, strict=False))
+                    .alias(col)
+                )
+
+        return df
+    except Exception as e:
+        print(f"Error loading defense scores: {e}")
+        return None
+
+
 def load_pipeline_metrics(results_dir: str) -> Optional[dict]:
     """
     Load pipeline metrics JSON file.

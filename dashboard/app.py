@@ -24,6 +24,7 @@ from utils.data_loader import (
     load_defensefinder_genes,
     load_pipeline_metrics,
     load_hit_to_contig_mapping,
+    load_defense_scores,
 )
 from utils.locus_viewer import (
     create_locus_figure,
@@ -374,6 +375,23 @@ app_ui = ui.page_sidebar(
                 ui.output_data_frame("locus_orf_table"),
                 full_screen=True,
             ),
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Defense Score Distribution"),
+                    ui.output_ui("defense_score_histogram"),
+                    full_screen=True,
+                ),
+                ui.card(
+                    ui.card_header("Defense Score Summary"),
+                    ui.output_ui("defense_score_summary"),
+                ),
+                col_widths=[8, 4],
+            ),
+            ui.card(
+                ui.card_header("Defense Scores for Co-transcribed Genes"),
+                ui.output_data_frame("defense_scores_table"),
+                full_screen=True,
+            ),
         ),
         ui.nav_panel(
             "Domain Annotations",
@@ -528,6 +546,13 @@ def server(input, output, session):
         rdir = results_dir()
         if rdir:
             return load_defensefinder_genes(rdir)
+        return None
+
+    @reactive.calc
+    def defense_scores_data():
+        rdir = results_dir()
+        if rdir:
+            return load_defense_scores(rdir)
         return None
 
     @reactive.calc
@@ -1070,6 +1095,96 @@ def server(input, output, session):
             contig_orfs.to_pandas(),
             filters=True,
             height="300px"
+        )
+
+    # ==================== Defense Scores (Locus Tab) ====================
+
+    @render.ui
+    def defense_score_histogram():
+        df = defense_scores_data()
+        if df is None or len(df) == 0:
+            return ui.p("No defense scores available. Run defense_score.py on pipeline results.")
+
+        # Filter to rows with numeric defense_score
+        scored = df.filter(pl.col("defense_score").is_not_null())
+        if len(scored) == 0:
+            return ui.p("No scored genes (DefenseFinder may not have run).")
+
+        fig = px.histogram(
+            scored.to_pandas(),
+            x="defense_score",
+            nbins=20,
+            labels={"defense_score": "Defense Score"},
+            color_discrete_sequence=[CHART_COLORS["primary"]],
+        )
+        fig.update_layout(
+            height=350,
+            plot_bgcolor=CHART_COLORS["background"],
+            xaxis=dict(range=[0, 1]),
+        )
+        fig.add_vline(x=0.1, line_dash="dash", line_color="#6b9090",
+                      annotation_text="Low threshold", annotation_position="top right")
+        fig.add_vline(x=0.5, line_dash="dash", line_color="#3d5a5a",
+                      annotation_text="High threshold", annotation_position="top right")
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    @render.ui
+    def defense_score_summary():
+        df = defense_scores_data()
+        if df is None or len(df) == 0:
+            return ui.p("No defense scores available.")
+
+        total = len(df)
+        scored = df.filter(pl.col("defense_score").is_not_null())
+        na_count = total - len(scored)
+
+        items = [f"Total co-transcribed genes: {total}"]
+
+        if na_count > 0:
+            items.append(f"Genes with NA scores: {na_count}")
+
+        if len(scored) > 0:
+            scores = scored["defense_score"]
+            mean_score = scores.mean()
+            median_score = scores.median()
+            low = scored.filter(pl.col("defense_score") < 0.1).height
+            high = scored.filter(pl.col("defense_score") >= 0.5).height
+
+            items.extend([
+                f"Mean score: {mean_score:.3f}",
+                f"Median score: {median_score:.3f}",
+                f"Low score (<0.1): {low} ({100*low/len(scored):.0f}%)",
+                f"High score (>=0.5): {high} ({100*high/len(scored):.0f}%)",
+            ])
+
+        sig = df.filter(pl.col("has_significant_domain") == "TRUE")
+        if len(sig) > 0:
+            items.append(f"With significant domain: {len(sig)}")
+
+        return ui.tags.ul([ui.tags.li(item) for item in items])
+
+    @render.data_frame
+    def defense_scores_table():
+        df = defense_scores_data()
+        if df is None or len(df) == 0:
+            return None
+
+        # Select key display columns
+        display_cols = [
+            col for col in [
+                "downstream_orf", "blast_hit_id", "contig", "defense_score",
+                "proximity_score", "density_score", "nearest_defense_gene",
+                "nearest_defense_type", "nearest_distance_bp",
+                "defense_genes_in_window", "has_significant_domain",
+                "significant_domains", "interpro_domains",
+            ]
+            if col in df.columns
+        ]
+
+        return render.DataTable(
+            df.select(display_cols).to_pandas(),
+            filters=True,
+            height="400px",
         )
 
     # ==================== Defense Locus Viewer ====================
