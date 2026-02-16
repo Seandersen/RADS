@@ -71,10 +71,51 @@ DEFENSE_SYSTEM_COLORS = {
     "default_defense": "#2c5d73",  # Default: navy blue
 }
 
-# Special colors - teal theme
-QUERY_HIT_COLOR = "#2d4a4a"      # Dark teal for query hits (recombinases)
-DOWNSTREAM_COLOR = "#6b9090"     # Medium teal for co-transcribed downstream genes
-NO_ANNOTATION_COLOR = "#d5e0e0"  # Light gray-teal for unannotated genes
+# Special colors for locus viewer gene categories
+# Palette inspired by defense system biology figures (dark teal / slate / cool gray)
+QUERY_HIT_COLOR = "#2d3d3d"      # Darkest teal-black for query hits (recombinases)
+DOWNSTREAM_COLOR = "#5a8a7a"     # Medium green-teal for co-transcribed downstream genes
+DEFENSE_COLOR = "#6a9eae"        # Light blue-teal for defense system genes
+MGE_COLOR = "#4a5a6a"            # Dark slate-blue for mobile genetic elements
+INTERPROSCAN_OTHER_COLOR = "#b0b0b0"  # Neutral gray for other InterProScan domains
+NO_ANNOTATION_COLOR = "#ffffff"  # White for unannotated genes
+
+# MGE-associated Pfam accessions for identifying mobile genetic elements
+MGE_PFAM_ACCESSIONS = {
+    "PF00665",   # rve - Integrase core domain
+    "PF01609",   # DDE_Tnp_1
+    "PF01527",   # HTH_Tnp_1
+    "PF01526",   # DDE_Tnp_IS3 (IS3/IS911)
+    "PF01610",   # DDE_Tnp_4 (IS4)
+    "PF02371",   # Transposase_mut (MuDR)
+    "PF02914",   # DDE_Tnp_IS1
+    "PF03400",   # DDE_Tnp_IS21
+    "PF05598",   # DUF772 (IS200/IS605)
+    "PF00589",   # Phage_integrase
+    "PF13009",   # DDE transposase variant
+    "PF13276",   # DDE transposase variant
+    "PF13358",   # DDE transposase variant
+    "PF03389",   # MobA/MobL mobilization
+    "PF01076",   # Relaxase/TraI conjugative
+}
+
+# MGE keyword patterns for description matching
+MGE_KEYWORDS = [
+    "transposase", "integrase", "recombinase", "conjugal transfer",
+    "mobilization", "insertion sequence", "is element", "conjugative",
+]
+
+
+def is_mge_domain(signature_accession: str, signature_desc: str) -> bool:
+    """Check if a domain annotation indicates a mobile genetic element."""
+    if signature_accession and signature_accession in MGE_PFAM_ACCESSIONS:
+        return True
+    if signature_desc:
+        desc_lower = signature_desc.lower()
+        for keyword in MGE_KEYWORDS:
+            if keyword in desc_lower:
+                return True
+    return False
 
 
 def create_gene_arrow(
@@ -211,6 +252,7 @@ def create_locus_figure(
                     ips_lookup[prot_id] = []
                 ips_lookup[prot_id].append({
                     "analysis": row.get("analysis", ""),
+                    "signature_accession": row.get("signature_accession", ""),
                     "signature_desc": row.get("signature_desc", ""),
                     "start": row.get("start", 0),
                     "stop": row.get("stop", 0),
@@ -266,16 +308,29 @@ def create_locus_figure(
         elif orf_id in defense_lookup:
             defense_info = defense_lookup[orf_id]
             defense_type = defense_info.get("type", "")
-            color = DEFENSE_SYSTEM_COLORS.get(defense_type, DEFENSE_SYSTEM_COLORS["default_defense"])
+            color = DEFENSE_COLOR
             annotation_text = f"Defense: {defense_info.get('gene_name', '')} ({defense_type})"
 
-        # Check InterProScan annotations
+        # Check for MGE-associated domains (before general InterProScan)
+        elif orf_id in ips_lookup and any(
+            is_mge_domain(d.get("signature_accession", ""), d.get("signature_desc", ""))
+            for d in ips_lookup[orf_id]
+        ):
+            # Find the matching MGE domain for annotation text
+            mge_domain = next(
+                d for d in ips_lookup[orf_id]
+                if is_mge_domain(d.get("signature_accession", ""), d.get("signature_desc", ""))
+            )
+            color = MGE_COLOR
+            desc = mge_domain.get("signature_desc", "Unknown")
+            annotation_text = f"MGE: {desc}"
+
+        # Check InterProScan annotations (other domains - gray)
         elif orf_id in ips_lookup:
             domains = ips_lookup[orf_id]
             if domains:
-                # Use the first domain's analysis type for coloring
+                color = INTERPROSCAN_OTHER_COLOR
                 analysis = domains[0].get("analysis", "")
-                color = DOMAIN_COLORS.get(analysis, DOMAIN_COLORS["default_interproscan"])
                 desc = domains[0].get("signature_desc", "Unknown")
                 annotation_text = f"{analysis}: {desc}"
 
@@ -583,8 +638,10 @@ def create_color_legend_html() -> str:
     legend_items = [
         (QUERY_HIT_COLOR, "Query Hit (Recombinase)"),
         (DOWNSTREAM_COLOR, "Co-transcribed Downstream"),
-        ("#2c5d73", "Defense System Gene"),  # Navy blue for defense systems
-        (NO_ANNOTATION_COLOR, "No Annotation"),
+        (DEFENSE_COLOR, "Defense System Gene"),
+        (MGE_COLOR, "Mobile Genetic Element"),
+        (INTERPROSCAN_OTHER_COLOR, "Other Domain"),
+        (NO_ANNOTATION_COLOR, "Unannotated"),
     ]
 
     html = '<div style="display: flex; flex-wrap: wrap; gap: 15px; margin: 10px 0;">'
@@ -599,3 +656,29 @@ def create_color_legend_html() -> str:
     html += '</div>'
 
     return html
+
+
+def get_contigs_with_mge(
+    orfs: pl.DataFrame,
+    interproscan: pl.DataFrame,
+) -> list[str]:
+    """Get contigs containing non-query MGE-associated genes."""
+    if orfs is None or interproscan is None or len(interproscan) == 0:
+        return []
+
+    # Find ORF IDs with MGE-associated InterProScan hits
+    mge_orfs = set()
+    for row in interproscan.iter_rows(named=True):
+        prot_id = row.get("protein_accession", "")
+        sig_acc = row.get("signature_accession", "")
+        sig_desc = row.get("signature_desc", "")
+        if prot_id and is_mge_domain(sig_acc, sig_desc):
+            mge_orfs.add(prot_id)
+
+    # Map MGE ORFs to their contigs
+    contigs_with_mge = set()
+    for row in orfs.iter_rows(named=True):
+        if row["orf_id"] in mge_orfs:
+            contigs_with_mge.add(row["contig"])
+
+    return sorted(list(contigs_with_mge))

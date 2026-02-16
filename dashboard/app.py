@@ -9,6 +9,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 import polars as pl
 
+# Project root is one level above the dashboard directory
+PROJECT_ROOT = Path(__file__).parent.parent
+RESULTS_DIR = PROJECT_ROOT / "results"
+
 # Import data loader
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
@@ -32,7 +36,9 @@ from utils.locus_viewer import (
     get_contig_choices,
     get_contigs_with_hits,
     get_contigs_with_defense,
+    get_contigs_with_mge,
     create_color_legend_html,
+    is_mge_domain,
 )
 
 
@@ -360,6 +366,41 @@ app_ui = ui.page_sidebar(
                         choices=[],
                     ),
                     ui.hr(),
+                    ui.h5("Locus Filters"),
+                    ui.input_slider(
+                        "locus_defense_score_range",
+                        "Defense Score Range",
+                        min=0.0,
+                        max=1.0,
+                        value=[0.0, 1.0],
+                        step=0.05,
+                    ),
+                    ui.input_checkbox(
+                        "locus_has_cotranscribed",
+                        "Only contigs with co-transcribed genes",
+                        value=False,
+                    ),
+                    ui.input_checkbox(
+                        "locus_has_defense",
+                        "Only contigs with defense systems",
+                        value=False,
+                    ),
+                    ui.input_checkbox(
+                        "locus_has_mge",
+                        "Only contigs with other MGEs",
+                        value=False,
+                    ),
+                    ui.input_selectize(
+                        "locus_defense_type_filter",
+                        "Defense System Type:",
+                        choices=[],
+                        multiple=True,
+                    ),
+                    ui.input_action_button(
+                        "locus_reset_filters",
+                        "Reset Filters",
+                    ),
+                    ui.hr(),
                     ui.h6("Color Legend"),
                     ui.output_ui("locus_color_legend"),
                     width=280,
@@ -472,7 +513,7 @@ def server(input, output, session):
     # Initialize sample selector
     @reactive.effect
     def _():
-        samples = find_results_dir("results")
+        samples = find_results_dir(str(RESULTS_DIR))
         if samples:
             ui.update_select("sample_select", choices=samples, selected=samples[0])
 
@@ -481,7 +522,7 @@ def server(input, output, session):
     def results_dir():
         sample = input.sample_select()
         if sample:
-            return f"results/{sample}"
+            return str(RESULTS_DIR / sample)
         return None
 
     @reactive.calc
@@ -1005,31 +1046,121 @@ def server(input, output, session):
 
     # ==================== Locus Viewer Tab ====================
 
-    # Update contig selector based on filter type
+    # Populate defense type selectize choices
     @reactive.effect
-    def _update_locus_contigs():
+    def _update_defense_type_choices():
+        df = defensefinder_genes()
+        if df is not None and len(df) > 0 and "type" in df.columns:
+            types = sorted(df["type"].unique().to_list())
+            ui.update_selectize("locus_defense_type_filter", choices=types)
+
+    # Reset filters button handler
+    @reactive.effect
+    @reactive.event(input.locus_reset_filters)
+    def _reset_locus_filters():
+        ui.update_slider("locus_defense_score_range", value=[0.0, 1.0])
+        ui.update_checkbox("locus_has_cotranscribed", value=False)
+        ui.update_checkbox("locus_has_defense", value=False)
+        ui.update_checkbox("locus_has_mge", value=False)
+        ui.update_selectize("locus_defense_type_filter", selected=[])
+
+    @reactive.calc
+    def filtered_contigs():
+        """Apply all locus filters to produce a filtered contig list."""
         filter_type = input.locus_filter_type()
         orfs = orf_data()
         blast = blast_data()
-        defense_genes = defensefinder_genes()
+        defense_genes_df = defensefinder_genes()
+        interproscan = interproscan_data()
+        scores = defense_scores_data()
 
         if orfs is None or len(orfs) == 0:
-            ui.update_select("locus_contig_select", choices=["No contigs available"])
-            return
+            return []
 
+        # Step 1: Base contig list from radio button
         if filter_type == "hits":
             contigs = get_contigs_with_hits(orfs, blast)
-            if not contigs:
-                contigs = ["No contigs with hits"]
         elif filter_type == "defense":
-            contigs = get_contigs_with_defense(orfs, defense_genes)
-            if not contigs:
-                contigs = ["No contigs with defense systems"]
+            contigs = get_contigs_with_defense(orfs, defense_genes_df)
         else:
             contigs = get_contig_choices(orfs)
 
-        if contigs:
-            ui.update_select("locus_contig_select", choices=contigs, selected=contigs[0])
+        if not contigs:
+            return []
+
+        contig_set = set(contigs)
+
+        # Step 2: Defense score range filter
+        score_range = input.locus_defense_score_range()
+        if scores is not None and len(scores) > 0 and (score_range[0] > 0.0 or score_range[1] < 1.0):
+            scored = scores.filter(pl.col("defense_score").is_not_null())
+            if len(scored) > 0 and "contig" in scored.columns:
+                matching_contigs = set(
+                    scored.filter(
+                        (pl.col("defense_score") >= score_range[0]) &
+                        (pl.col("defense_score") <= score_range[1])
+                    )["contig"].unique().to_list()
+                )
+                contig_set &= matching_contigs
+
+        # Step 3: Has co-transcribed genes filter
+        if input.locus_has_cotranscribed():
+            cotx = cotx_data()
+            if cotx is not None and len(cotx) > 0 and "downstream_orf" in cotx.columns:
+                # Get contigs that have downstream co-transcribed ORFs
+                downstream_ids = set(cotx["downstream_orf"].to_list())
+                cotx_contigs = set()
+                for row in orfs.iter_rows(named=True):
+                    if row["orf_id"] in downstream_ids:
+                        cotx_contigs.add(row["contig"])
+                contig_set &= cotx_contigs
+            else:
+                contig_set = set()
+
+        # Step 4: Has defense systems filter
+        if input.locus_has_defense():
+            defense_contigs = set(get_contigs_with_defense(orfs, defense_genes_df))
+            contig_set &= defense_contigs
+
+        # Step 4: Has other MGEs filter
+        if input.locus_has_mge():
+            mge_contigs = set(get_contigs_with_mge(orfs, interproscan))
+            contig_set &= mge_contigs
+
+        # Step 5: Defense type filter
+        selected_types = input.locus_defense_type_filter()
+        if selected_types and len(selected_types) > 0 and defense_genes_df is not None and len(defense_genes_df) > 0:
+            type_set = set(selected_types)
+            # Find ORFs matching selected defense types
+            matching_orf_ids = set()
+            for row in defense_genes_df.iter_rows(named=True):
+                if row.get("type", "") in type_set:
+                    matching_orf_ids.add(row.get("hit_id", ""))
+            # Map to contigs
+            type_contigs = set()
+            for row in orfs.iter_rows(named=True):
+                if row["orf_id"] in matching_orf_ids:
+                    type_contigs.add(row["contig"])
+            contig_set &= type_contigs
+
+        return sorted(list(contig_set))
+
+    # Update contig selector based on filtered contigs
+    @reactive.effect
+    def _update_locus_contigs():
+        contigs = filtered_contigs()
+
+        if not contigs:
+            filter_type = input.locus_filter_type()
+            if filter_type == "hits":
+                ui.update_select("locus_contig_select", choices=["No contigs with hits"])
+            elif filter_type == "defense":
+                ui.update_select("locus_contig_select", choices=["No contigs with defense systems"])
+            else:
+                ui.update_select("locus_contig_select", choices=["No matching contigs"])
+            return
+
+        ui.update_select("locus_contig_select", choices=contigs, selected=contigs[0])
 
     @reactive.calc
     def selected_contig_orfs():
@@ -1105,6 +1236,11 @@ def server(input, output, session):
         if df is None or len(df) == 0:
             return ui.p("No defense scores available. Run defense_score.py on pipeline results.")
 
+        # Filter by currently filtered contigs
+        contigs = filtered_contigs()
+        if contigs and "contig" in df.columns:
+            df = df.filter(pl.col("contig").is_in(contigs))
+
         # Filter to rows with numeric defense_score
         scored = df.filter(pl.col("defense_score").is_not_null())
         if len(scored) == 0:
@@ -1167,6 +1303,14 @@ def server(input, output, session):
     def defense_scores_table():
         df = defense_scores_data()
         if df is None or len(df) == 0:
+            return None
+
+        # Filter by currently filtered contigs
+        contigs = filtered_contigs()
+        if contigs and "contig" in df.columns:
+            df = df.filter(pl.col("contig").is_in(contigs))
+
+        if len(df) == 0:
             return None
 
         # Select key display columns
