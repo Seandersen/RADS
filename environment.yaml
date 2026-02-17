@@ -32,3 +32,4 @@ dependencies:
   - polars                 # Fast dataframes
   - numpy                  # Required by plotly
   - pandas                 # Required for plotly express
+  - scipy                  # Required for binomial analysis

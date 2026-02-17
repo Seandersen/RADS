@@ -18,6 +18,7 @@ biopython = ">=1.80"
 openjdk = ">=17"
 openpyxl = ">=3.0"
 hmmer = ">=3.1"
+scipy = ">=1.10"
 
 [feature.dashboard.dependencies]
 shiny = ">=0.6"

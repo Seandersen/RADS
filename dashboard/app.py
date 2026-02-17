@@ -244,10 +244,10 @@ app_ui = ui.page_sidebar(
                     theme="info",
                 ),
                 ui.value_box(
-                    "Co-transcribed Pairs",
-                    ui.output_text("stat_cotx"),
-                    showcase=ui.HTML('<i class="fa-solid fa-link" style="font-size: 2rem;"></i>'),
-                    theme="warning",
+                    "Hits per Mb",
+                    ui.output_text("stat_hits_per_mb"),
+                    showcase=ui.HTML('<i class="fa-solid fa-chart-line" style="font-size: 2rem;"></i>'),
+                    theme="secondary",
                 ),
                 col_widths=[3, 3, 3, 3],
             ),
@@ -259,19 +259,19 @@ app_ui = ui.page_sidebar(
                     theme="danger",
                 ),
                 ui.value_box(
-                    "Hits per Mb",
-                    ui.output_text("stat_hits_per_mb"),
-                    showcase=ui.HTML('<i class="fa-solid fa-chart-line" style="font-size: 2rem;"></i>'),
-                    theme="secondary",
+                    "Co-transcribed Pairs",
+                    ui.output_text("stat_cotx"),
+                    showcase=ui.HTML('<i class="fa-solid fa-link" style="font-size: 2rem;"></i>'),
+                    theme="warning",
                 ),
                 ui.value_box(
-                    ui.HTML('Defense Systems per Contig<br><small style="color: #a8c4c4; font-weight: normal;">Ratio of unique defense systems to total contigs</small>'),
+                    ui.HTML('<span title="Ratio of unique defense systems to total contigs">Known Defense Systems per Contig</span>'),
                     ui.output_text("stat_discovery_per_contig"),
                     showcase=ui.HTML('<i class="fa-solid fa-magnifying-glass" style="font-size: 2rem;"></i>'),
                     theme="light",
                 ),
                 ui.value_box(
-                    ui.HTML('Genomes with Defense (%)<br><small style="color: #a8c4c4; font-weight: normal;">Proportion of genomes with at least one defense system</small>'),
+                    ui.HTML('<span title="Proportion of genomes with at least one defense system">Genomes with Known Defense (%)</span>'),
                     ui.output_text("stat_discovery_per_genome"),
                     showcase=ui.HTML('<i class="fa-solid fa-bacteria" style="font-size: 2rem;"></i>'),
                     theme="dark",
@@ -389,6 +389,20 @@ app_ui = ui.page_sidebar(
                         selected="hits",
                     ),
                     ui.hr(),
+                    ui.layout_columns(
+                        ui.input_action_button(
+                            "locus_select_all",
+                            "Select All Filtered",
+                            class_="btn-sm",
+                        ),
+                        ui.input_action_button(
+                            "locus_clear_all",
+                            "Clear All",
+                            class_="btn-sm",
+                        ),
+                        col_widths=[6, 6],
+                    ),
+                    ui.output_ui("locus_selected_count"),
                     ui.input_selectize(
                         "locus_contig_select",
                         "Select Contig(s):",
@@ -406,6 +420,14 @@ app_ui = ui.page_sidebar(
                             max=1.0,
                             value=[0.0, 1.0],
                             step=0.05,
+                        ),
+                        ui.input_slider(
+                            "locus_binomial_pvalue",
+                            "Binomial p-value threshold",
+                            min=0.001,
+                            max=0.1,
+                            value=0.05,
+                            step=0.001,
                         ),
                     ),
                     ui.input_checkbox(
@@ -507,6 +529,12 @@ app_ui = ui.page_sidebar(
                 ui.card_header("Defense System Locus Viewer"),
                 ui.layout_sidebar(
                     ui.sidebar(
+                        ui.input_selectize(
+                            "defense_type_filter",
+                            "Filter by Defense Type:",
+                            choices=[],
+                            multiple=True,
+                        ),
                         ui.input_select(
                             "defense_contig_select",
                             "Select contig with defense system:",
@@ -517,11 +545,6 @@ app_ui = ui.page_sidebar(
                     ),
                     ui.output_ui("defense_locus_plot"),
                 ),
-                full_screen=True,
-            ),
-            ui.card(
-                ui.card_header("Defense Systems Table"),
-                ui.output_data_frame("defense_systems_table"),
                 full_screen=True,
             ),
             ui.card(
@@ -782,23 +805,29 @@ def server(input, output, session):
     def hits_per_genome_plot():
         df = blast_data()
         if df is None or len(df) == 0:
-            return ui.p("No data available")
+            return ui.p("No BLAST data available. Run the pipeline first.")
 
-        counts = df.group_by("genome").len().sort("len", descending=True)
-        fig = px.bar(
-            counts.to_pandas(),
-            x="genome",
-            y="len",
-            labels={"genome": "Genome", "len": "Hit Count"},
-            color_discrete_sequence=[CHART_COLORS["primary"]],
-        )
-        fig.update_layout(
-            xaxis_tickangle=-45,
-            margin=dict(b=100),
-            height=300,
-            plot_bgcolor=CHART_COLORS["background"],
-        )
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        if "genome" not in df.columns:
+            return ui.p("No genome column in BLAST results.")
+
+        try:
+            counts = df.group_by("genome").len().sort("len", descending=True)
+            fig = px.bar(
+                counts.to_pandas(),
+                x="genome",
+                y="len",
+                labels={"genome": "Genome", "len": "Hit Count"},
+                color_discrete_sequence=[CHART_COLORS["primary"]],
+            )
+            fig.update_layout(
+                xaxis_tickangle=-45,
+                margin=dict(b=100),
+                height=300,
+                plot_bgcolor=CHART_COLORS["background"],
+            )
+            return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        except Exception as e:
+            return ui.p(f"Error rendering hits per genome: {e}")
 
     # BLAST tab outputs
     @render.ui
@@ -1033,18 +1062,58 @@ def server(input, output, session):
             return load_binomial_results(rdir)
         return None
 
-    @render.ui
-    def binomial_bar_chart():
+    @reactive.calc
+    def cotx_binomial_data():
+        """Filter binomial results to only domains found in co-transcribed genes."""
         df = binomial_data()
         if df is None or len(df) == 0:
-            return ui.p("No binomial analysis results. Run the binomial analysis pipeline step.")
+            return None
+
+        cotx = cotx_data()
+        ips = interproscan_data()
+        if cotx is None or ips is None or len(cotx) == 0 or len(ips) == 0:
+            return None
+
+        if "downstream_orf" not in cotx.columns or "protein_accession" not in ips.columns:
+            return None
+
+        # Get InterPro accessions from co-transcribed genes
+        downstream_ids = set(cotx["downstream_orf"].to_list())
+        cotx_domains = ips.filter(pl.col("protein_accession").is_in(list(downstream_ids)))
+
+        if len(cotx_domains) == 0:
+            return None
+
+        # Collect InterPro accessions from co-transcribed gene annotations
+        cotx_interpro_ids = set()
+        if "interpro_accession" in cotx_domains.columns:
+            cotx_interpro_ids = set(
+                cotx_domains.filter(pl.col("interpro_accession") != "-")
+                ["interpro_accession"].unique().to_list()
+            )
+
+        if not cotx_interpro_ids:
+            return None
+
+        # Filter binomial results to only co-transcribed gene domains
+        id_col = "V13" if "V13" in df.columns else None
+        if id_col is None:
+            return df
+
+        return df.filter(pl.col(id_col).is_in(list(cotx_interpro_ids)))
+
+    @render.ui
+    def binomial_bar_chart():
+        df = cotx_binomial_data()
+        if df is None or len(df) == 0:
+            return ui.p("No binomial enrichment results for co-transcribed gene domains.")
         # Filter to significant domains
         if "p_adju" in df.columns:
             sig = df.filter(pl.col("p_adju") < 0.05)
         else:
             sig = df
         if len(sig) == 0:
-            return ui.p("No significantly enriched domains found.")
+            return ui.p("No significantly enriched domains found in co-transcribed genes.")
         # Sort by p_scaled descending
         if "p_scaled" in sig.columns:
             sig = sig.sort("p_scaled", descending=True).head(20)
@@ -1061,7 +1130,7 @@ def server(input, output, session):
 
     @render.data_frame
     def binomial_table():
-        df = binomial_data()
+        df = cotx_binomial_data()
         if df is None or len(df) == 0:
             return None
         if "p_adju" in df.columns:
@@ -1146,7 +1215,22 @@ def server(input, output, session):
         if not display_cols:
             return None
 
-        return render.DataTable(df.select(display_cols).to_pandas(), filters=True, height="400px")
+        result = df.select(display_cols)
+
+        # Join with binomial data to add enrichment p-value
+        binom = binomial_data()
+        if (binom is not None and len(binom) > 0
+                and "interpro_accession" in result.columns):
+            id_col = "V13" if "V13" in binom.columns else None
+            p_col = "p_adju" if "p_adju" in binom.columns else None
+            if id_col and p_col:
+                binom_lookup = binom.select([
+                    pl.col(id_col).alias("interpro_accession"),
+                    pl.col(p_col).alias("binomial_p_adjusted"),
+                ]).unique(subset=["interpro_accession"])
+                result = result.join(binom_lookup, on="interpro_accession", how="left")
+
+        return render.DataTable(result.to_pandas(), filters=True, height="400px")
 
     # DefenseFinder tab outputs
     @render.ui
@@ -1211,13 +1295,6 @@ def server(input, output, session):
         return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
 
     @render.data_frame
-    def defense_systems_table():
-        df = defensefinder_systems()
-        if df is None or len(df) == 0:
-            return None
-        return render.DataTable(df.to_pandas(), filters=True, height="400px")
-
-    @render.data_frame
     def defense_genes_table():
         df = defensefinder_genes()
         if df is None or len(df) == 0:
@@ -1247,10 +1324,38 @@ def server(input, output, session):
     @reactive.event(input.locus_reset_filters)
     def _reset_locus_filters():
         ui.update_slider("locus_defense_score_range", value=[0.0, 1.0])
+        ui.update_slider("locus_binomial_pvalue", value=0.05)
         ui.update_checkbox("locus_has_cotranscribed", value=False)
         ui.update_checkbox("locus_has_defense", value=False)
         ui.update_checkbox("locus_has_mge", value=False)
         ui.update_selectize("locus_defense_type_filter", selected=[])
+
+    # Select All Filtered button handler
+    @reactive.effect
+    @reactive.event(input.locus_select_all)
+    def _select_all_contigs():
+        contigs = filtered_contigs()
+        if contigs:
+            ui.update_selectize("locus_contig_select", selected=contigs)
+
+    # Clear All button handler
+    @reactive.effect
+    @reactive.event(input.locus_clear_all)
+    def _clear_all_contigs():
+        ui.update_selectize("locus_contig_select", selected=[])
+
+    # Selected count display
+    @render.ui
+    def locus_selected_count():
+        selected = input.locus_contig_select()
+        contigs = filtered_contigs()
+        selected_list = list(selected) if isinstance(selected, (tuple, list)) else [selected] if selected else []
+        selected_list = [c for c in selected_list if c and not c.startswith("No ")]
+        total = len(contigs) if contigs else 0
+        return ui.tags.small(
+            f"{len(selected_list)} of {total} contigs selected",
+            style="color: #8fb3b3; display: block; margin-bottom: 5px;"
+        )
 
     @reactive.calc
     def filtered_contigs():
@@ -1288,6 +1393,34 @@ def server(input, output, session):
                     )["contig"].unique().to_list()
                 )
                 contig_set &= matching_contigs
+
+        # Step 2b: Binomial p-value filter (only when co-transcribed filter is active)
+        if input.locus_has_cotranscribed():
+            binom_threshold = input.locus_binomial_pvalue()
+            binom = binomial_data()
+            if binom is not None and len(binom) > 0 and "p_adju" in binom.columns:
+                id_col = "V13" if "V13" in binom.columns else None
+                if id_col is not None:
+                    # Get significant domain IDs at the chosen threshold
+                    sig_domains = set(
+                        binom.filter(pl.col("p_adju") <= binom_threshold)
+                        [id_col].to_list()
+                    )
+                    if sig_domains:
+                        ips = interproscan_data()
+                        if ips is not None and len(ips) > 0 and "interpro_accession" in ips.columns:
+                            # Find ORFs that have significant domains
+                            sig_orfs = set(
+                                ips.filter(pl.col("interpro_accession").is_in(list(sig_domains)))
+                                ["protein_accession"].unique().to_list()
+                            )
+                            # Map to contigs
+                            if orfs is not None and sig_orfs:
+                                sig_contigs = set(
+                                    orfs.filter(pl.col("orf_id").is_in(list(sig_orfs)))
+                                    ["contig"].unique().to_list()
+                                )
+                                contig_set &= sig_contigs
 
         # Step 3: Has co-transcribed genes filter
         if input.locus_has_cotranscribed():
@@ -1504,10 +1637,6 @@ def server(input, output, session):
                 f"High score (>=0.5): {high} ({100*high/len(scored):.0f}%)",
             ])
 
-        sig = df.filter(pl.col("has_significant_domain") == "TRUE")
-        if len(sig) > 0:
-            items.append(f"With significant domain: {len(sig)}")
-
         return ui.tags.ul([ui.tags.li(item) for item in items])
 
     @render.data_frame
@@ -1530,8 +1659,7 @@ def server(input, output, session):
                 "downstream_orf", "blast_hit_id", "contig", "defense_score",
                 "proximity_score", "density_score", "nearest_defense_gene",
                 "nearest_defense_type", "nearest_distance_bp",
-                "defense_genes_in_window", "has_significant_domain",
-                "significant_domains", "interpro_domains",
+                "defense_genes_in_window", "interpro_domains",
             ]
             if col in df.columns
         ]
@@ -1544,12 +1672,38 @@ def server(input, output, session):
 
     # ==================== Defense Locus Viewer ====================
 
+    # Populate defense type filter choices in DefenseFinder tab
+    @reactive.effect
+    def _update_defense_type_filter():
+        df = defensefinder_genes()
+        if df is not None and len(df) > 0 and "type" in df.columns:
+            types = sorted(df["type"].unique().to_list())
+            ui.update_selectize("defense_type_filter", choices=types)
+
     @reactive.effect
     def _update_defense_contigs():
         orfs = orf_data()
-        defense_genes = defensefinder_genes()
+        defense_genes_df = defensefinder_genes()
 
-        contigs = get_contigs_with_defense(orfs, defense_genes)
+        contigs = get_contigs_with_defense(orfs, defense_genes_df)
+
+        # Apply defense type filter if selected
+        selected_types = input.defense_type_filter()
+        if selected_types and len(selected_types) > 0 and defense_genes_df is not None and len(defense_genes_df) > 0:
+            type_set = set(selected_types)
+            # Find ORFs matching selected defense types
+            matching_orf_ids = set()
+            for row in defense_genes_df.iter_rows(named=True):
+                if row.get("type", "") in type_set:
+                    matching_orf_ids.add(row.get("hit_id", ""))
+            # Map to contigs
+            if orfs is not None:
+                type_contigs = set()
+                for row in orfs.iter_rows(named=True):
+                    if row["orf_id"] in matching_orf_ids:
+                        type_contigs.add(row["contig"])
+                contigs = sorted(list(set(contigs) & type_contigs))
+
         if contigs:
             ui.update_select("defense_contig_select", choices=contigs, selected=contigs[0])
         else:

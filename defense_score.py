@@ -153,28 +153,6 @@ def parse_interproscan(path):
     return domains
 
 
-def parse_binomial(path):
-    """Parse BinomialAnalysis.csv.
-
-    Returns set of significant InterPro IDs (adjusted p < 0.05).
-    """
-    significant = set()
-    if not path or not os.path.exists(path):
-        return significant
-
-    with open(path) as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            try:
-                p_adj = float(row.get("p_adju", 1.0))
-            except (ValueError, TypeError):
-                continue
-            if p_adj < 0.05:
-                interpro_id = row.get("V13", "")
-                if interpro_id:
-                    significant.add(interpro_id)
-    return significant
-
 
 def midpoint(orf_info):
     """Calculate the midpoint of an ORF."""
@@ -192,7 +170,7 @@ def distance_between(orf_a, orf_b):
 
 
 def compute_scores(cotranscribed, orf_coords, defense_genes, interpro_domains,
-                   significant_domains, scale, window, w_prox, w_dens):
+                   scale, window, w_prox, w_dens):
     """Compute defense scores for all co-transcribed genes.
 
     Returns list of output row dicts.
@@ -315,10 +293,6 @@ def compute_scores(cotranscribed, orf_coords, defense_genes, interpro_domains,
         orf_domains = interpro_domains.get(downstream_orf, set())
         out["interpro_domains"] = ";".join(sorted(orf_domains)) if orf_domains else ""
 
-        sig_hits = orf_domains & significant_domains
-        out["has_significant_domain"] = "TRUE" if sig_hits else "FALSE"
-        out["significant_domains"] = ";".join(sorted(sig_hits)) if sig_hits else ""
-
         results.append(out)
 
     return results
@@ -339,8 +313,6 @@ OUTPUT_COLUMNS = [
     "density_score",
     "defense_score",
     "interpro_domains",
-    "has_significant_domain",
-    "significant_domains",
 ]
 
 
@@ -363,10 +335,6 @@ def main():
     parser.add_argument(
         "--interproscan", default=None,
         help="Path to interproscan_results.tsv (optional)"
-    )
-    parser.add_argument(
-        "--binomial", default=None,
-        help="Path to BinomialAnalysis.csv (optional)"
     )
     parser.add_argument(
         "--output", default="defense_scores.tsv",
@@ -404,7 +372,6 @@ def main():
     orf_coords = parse_prodigal_headers(args.contigs_faa)
     defense_genes = parse_defense_genes(args.defense_genes)
     interpro_domains = parse_interproscan(args.interproscan)
-    significant_domains = parse_binomial(args.binomial)
 
     if defense_genes is None:
         print("WARNING: DefenseFinder results missing or empty — scoring columns set to NA",
@@ -413,7 +380,7 @@ def main():
     # Compute scores
     results = compute_scores(
         cotranscribed, orf_coords, defense_genes, interpro_domains,
-        significant_domains, args.scale, args.window,
+        args.scale, args.window,
         args.w_proximity, args.w_density,
     )
 
@@ -436,9 +403,6 @@ def main():
             high = sum(1 for s in scores if s >= 0.5)
             print(f"  Low (<0.1):  {low}  |  High (>=0.5): {high}")
 
-    sig_count = sum(1 for r in results if r["has_significant_domain"] == "TRUE")
-    if sig_count:
-        print(f"  Genes with significant domains: {sig_count}")
 
 
 if __name__ == "__main__":

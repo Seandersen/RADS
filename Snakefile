@@ -35,12 +35,11 @@ def get_all_targets(wildcards=None):
         f"results/{SAMPLE}/defensefinder/defense_finder_systems.tsv",
         f"results/{SAMPLE}/metrics/pipeline_metrics.json",
     ]
+    # Defense scores (proximity/density to known defense systems)
+    targets.append(f"results/{SAMPLE}/defense_scores.tsv")
     # Optional: Binomial domain enrichment analysis
     if config.get("binomial", {}).get("enabled", False):
         targets.append(f"results/{SAMPLE}/BinomialAnalysis.csv")
-    # Defense scores (requires binomial + defensefinder)
-    if config.get("binomial", {}).get("enabled", False):
-        targets.append(f"results/{SAMPLE}/defense_scores.tsv")
     return targets
 
 rule all:

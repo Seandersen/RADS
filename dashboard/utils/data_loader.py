@@ -405,7 +405,7 @@ def load_defense_scores(results_dir: str) -> Optional[pl.DataFrame]:
     - downstream_orf, blast_hit_id, contig, orf_start, orf_stop, strand
     - nearest_defense_gene, nearest_defense_type, nearest_distance_bp
     - defense_genes_in_window, proximity_score, density_score, defense_score
-    - interpro_domains, has_significant_domain, significant_domains
+    - interpro_domains
     """
     scores_file = Path(results_dir) / "defense_scores.tsv"
     if not scores_file.exists():

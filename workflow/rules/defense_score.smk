@@ -9,7 +9,6 @@ rule calculate_defense_scores:
         defense_genes=f"results/{SAMPLE}/defensefinder/defense_finder_genes.tsv",
         contigs_faa=f"results/{SAMPLE}/contig_orfs/all_contigs.faa",
         interproscan=f"results/{SAMPLE}/interproscan_results.tsv",
-        binomial=f"results/{SAMPLE}/BinomialAnalysis.csv",
     output:
         scores=f"results/{SAMPLE}/defense_scores.tsv",
     log:
@@ -21,7 +20,6 @@ rule calculate_defense_scores:
             --defense-genes {input.defense_genes} \
             --contigs-faa {input.contigs_faa} \
             --interproscan {input.interproscan} \
-            --binomial {input.binomial} \
             --output {output.scores} \
             2>&1 | tee {log}
         """
