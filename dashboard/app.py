@@ -29,6 +29,7 @@ from utils.data_loader import (
     load_pipeline_metrics,
     load_hit_to_contig_mapping,
     load_defense_scores,
+    load_binomial_results,
 )
 from utils.locus_viewer import (
     create_locus_figure,
@@ -264,13 +265,13 @@ app_ui = ui.page_sidebar(
                     theme="secondary",
                 ),
                 ui.value_box(
-                    "Discovery Rate (per contig)",
+                    ui.HTML('Defense Systems per Contig<br><small style="color: #a8c4c4; font-weight: normal;">Ratio of unique defense systems to total contigs</small>'),
                     ui.output_text("stat_discovery_per_contig"),
                     showcase=ui.HTML('<i class="fa-solid fa-magnifying-glass" style="font-size: 2rem;"></i>'),
                     theme="light",
                 ),
                 ui.value_box(
-                    "Discovery Rate (per genome)",
+                    ui.HTML('Genomes with Defense (%)<br><small style="color: #a8c4c4; font-weight: normal;">Proportion of genomes with at least one defense system</small>'),
                     ui.output_text("stat_discovery_per_genome"),
                     showcase=ui.HTML('<i class="fa-solid fa-bacteria" style="font-size: 2rem;"></i>'),
                     theme="dark",
@@ -343,6 +344,35 @@ app_ui = ui.page_sidebar(
                 ui.output_ui("cotx_distance_plot"),
                 full_screen=True,
             ),
+            ui.card(
+                ui.card_header("Domain Annotations for Co-transcribed Genes"),
+                ui.layout_columns(
+                    ui.output_ui("cotx_domain_bar_chart"),
+                    ui.output_data_frame("cotx_domain_table"),
+                    col_widths=[6, 6],
+                ),
+                full_screen=True,
+            ),
+            ui.card(
+                ui.card_header("DefenseFinder Hits in Co-transcribed Genes"),
+                ui.output_ui("cotx_defense_summary_text"),
+                ui.output_data_frame("cotx_defense_table"),
+                full_screen=True,
+            ),
+            ui.card(
+                ui.card_header("Defense Score Distribution"),
+                ui.output_ui("cotx_defense_score_plot"),
+                full_screen=True,
+            ),
+            ui.card(
+                ui.card_header("Binomial Domain Enrichment"),
+                ui.layout_columns(
+                    ui.output_ui("binomial_bar_chart"),
+                    ui.output_data_frame("binomial_table"),
+                    col_widths=[6, 6],
+                ),
+                full_screen=True,
+            ),
         ),
         ui.nav_panel(
             "Locus Viewer",
@@ -355,25 +385,28 @@ app_ui = ui.page_sidebar(
                         choices={
                             "all": "All contigs",
                             "hits": "Contigs with query hits",
-                            "defense": "Contigs with defense systems",
                         },
                         selected="hits",
                     ),
                     ui.hr(),
-                    ui.input_select(
+                    ui.input_selectize(
                         "locus_contig_select",
-                        "Select Contig:",
+                        "Select Contig(s):",
                         choices=[],
+                        multiple=True,
                     ),
                     ui.hr(),
                     ui.h5("Locus Filters"),
-                    ui.input_slider(
-                        "locus_defense_score_range",
-                        "Defense Score Range",
-                        min=0.0,
-                        max=1.0,
-                        value=[0.0, 1.0],
-                        step=0.05,
+                    ui.panel_conditional(
+                        "input.locus_has_cotranscribed",
+                        ui.input_slider(
+                            "locus_defense_score_range",
+                            "Defense Score Range",
+                            min=0.0,
+                            max=1.0,
+                            value=[0.0, 1.0],
+                            step=0.05,
+                        ),
                     ),
                     ui.input_checkbox(
                         "locus_has_cotranscribed",
@@ -713,17 +746,15 @@ def server(input, output, session):
         if df is not None and len(df) > 0 and total_genomes > 0:
             # Count unique contigs/genomes with defense systems
             if "replicon" in df.columns:
-                # Each contig comes from a genome
                 contigs_with_defense = df["replicon"].n_unique()
-                # This is a rough proxy - contigs with defense / total genomes
                 rate = min(contigs_with_defense / total_genomes, 1.0)
-                return f"{rate:.3f}"
+                return f"{rate * 100:.1f}%"
 
         # Fallback to metrics file
         metrics = pipeline_metrics()
         if metrics and metrics.get('discovery_rate_per_genome', 0) > 0:
-            return f"{metrics.get('discovery_rate_per_genome', 0):.3f}"
-        return "0.000"
+            return f"{metrics.get('discovery_rate_per_genome', 0) * 100:.1f}%"
+        return "0.0%"
 
     @render.ui
     def pipeline_status():
@@ -749,7 +780,7 @@ def server(input, output, session):
 
     @render.ui
     def hits_per_genome_plot():
-        df = filtered_blast_data()
+        df = blast_data()
         if df is None or len(df) == 0:
             return ui.p("No data available")
 
@@ -842,6 +873,10 @@ def server(input, output, session):
             labels={"contig": "Contig", "len": "ORF Count"},
             color_discrete_sequence=[CHART_COLORS["tertiary"]],
         )
+        median_val = counts["len"].median()
+        fig.add_hline(y=median_val, line_dash="dash", line_color="#3d5a5a",
+                      annotation_text=f"Median: {median_val:.0f}",
+                      annotation_position="top right")
         fig.update_layout(
             xaxis_tickangle=-45,
             margin=dict(b=100),
@@ -863,6 +898,11 @@ def server(input, output, session):
         df = cotx_data()
         if df is None:
             return None
+        # Join with defense scores to add defense_score column
+        scores = defense_scores_data()
+        if scores is not None and len(scores) > 0 and "downstream_orf" in scores.columns and "downstream_orf" in df.columns:
+            score_cols = scores.select(["downstream_orf", "defense_score"])
+            df = df.join(score_cols, on="downstream_orf", how="left")
         return render.DataTable(df.to_pandas(), filters=True, height="400px")
 
     @render.ui
@@ -881,6 +921,154 @@ def server(input, output, session):
         )
         fig.update_layout(height=300, plot_bgcolor=CHART_COLORS["background"])
         return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    # Co-transcription: Domain annotations for co-transcribed genes
+    @render.ui
+    def cotx_domain_bar_chart():
+        cotx = cotx_data()
+        ips = interproscan_data()
+        if cotx is None or ips is None or len(cotx) == 0 or len(ips) == 0:
+            return ui.p("No domain data for co-transcribed genes.")
+        if "downstream_orf" not in cotx.columns or "protein_accession" not in ips.columns:
+            return ui.p("Missing required columns.")
+        downstream_ids = set(cotx["downstream_orf"].to_list())
+        cotx_domains = ips.filter(pl.col("protein_accession").is_in(list(downstream_ids)))
+        if len(cotx_domains) == 0:
+            return ui.p("No domain annotations found for co-transcribed genes.")
+        if "signature_desc" not in cotx_domains.columns:
+            return ui.p("No signature descriptions available.")
+        counts = (
+            cotx_domains.filter(pl.col("signature_desc") != "-")
+            .group_by("signature_desc").len()
+            .sort("len", descending=True).head(15)
+        )
+        if len(counts) == 0:
+            return ui.p("No domains found.")
+        fig = px.bar(
+            counts.to_pandas(), x="len", y="signature_desc", orientation="h",
+            labels={"len": "Count", "signature_desc": "Domain"},
+            color_discrete_sequence=[CHART_COLORS["secondary"]],
+        )
+        fig.update_layout(height=400, yaxis={"categoryorder": "total ascending"},
+                          margin=dict(l=200), plot_bgcolor=CHART_COLORS["background"])
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    @render.data_frame
+    def cotx_domain_table():
+        cotx = cotx_data()
+        ips = interproscan_data()
+        if cotx is None or ips is None or len(cotx) == 0 or len(ips) == 0:
+            return None
+        if "downstream_orf" not in cotx.columns or "protein_accession" not in ips.columns:
+            return None
+        downstream_ids = set(cotx["downstream_orf"].to_list())
+        cotx_domains = ips.filter(pl.col("protein_accession").is_in(list(downstream_ids)))
+        if len(cotx_domains) == 0:
+            return None
+        display_cols = [c for c in ["protein_accession", "analysis", "signature_accession",
+                                     "signature_desc", "interpro_accession", "interpro_desc"]
+                        if c in cotx_domains.columns]
+        return render.DataTable(cotx_domains.select(display_cols).to_pandas(), filters=True, height="400px")
+
+    # Co-transcription: DefenseFinder hits
+    @render.ui
+    def cotx_defense_summary_text():
+        cotx = cotx_data()
+        genes = defensefinder_genes()
+        if cotx is None or genes is None or len(cotx) == 0 or len(genes) == 0:
+            return ui.p("No DefenseFinder data for co-transcribed genes.")
+        if "downstream_orf" not in cotx.columns or "hit_id" not in genes.columns:
+            return ui.p("Missing required columns.")
+        downstream_ids = set(cotx["downstream_orf"].to_list())
+        gene_ids = set(genes["hit_id"].to_list())
+        matches = downstream_ids & gene_ids
+        return ui.p(f"{len(matches)} of {len(downstream_ids)} co-transcribed genes have DefenseFinder hits")
+
+    @render.data_frame
+    def cotx_defense_table():
+        cotx = cotx_data()
+        genes = defensefinder_genes()
+        if cotx is None or genes is None or len(cotx) == 0 or len(genes) == 0:
+            return None
+        if "downstream_orf" not in cotx.columns or "hit_id" not in genes.columns:
+            return None
+        downstream_ids = list(set(cotx["downstream_orf"].to_list()))
+        matching = genes.filter(pl.col("hit_id").is_in(downstream_ids))
+        if len(matching) == 0:
+            return None
+        return render.DataTable(matching.to_pandas(), filters=True, height="300px")
+
+    # Co-transcription: Defense score distribution
+    @render.ui
+    def cotx_defense_score_plot():
+        cotx = cotx_data()
+        scores = defense_scores_data()
+        if cotx is None or scores is None or len(cotx) == 0 or len(scores) == 0:
+            return ui.p("No defense scores for co-transcribed genes.")
+        if "downstream_orf" not in cotx.columns or "downstream_orf" not in scores.columns:
+            return ui.p("Missing required columns.")
+        downstream_ids = list(set(cotx["downstream_orf"].to_list()))
+        cotx_scores = scores.filter(pl.col("downstream_orf").is_in(downstream_ids))
+        scored = cotx_scores.filter(pl.col("defense_score").is_not_null())
+        if len(scored) == 0:
+            return ui.p("No scored co-transcribed genes.")
+        fig = px.histogram(
+            scored.to_pandas(), x="defense_score", nbins=20,
+            labels={"defense_score": "Defense Score"},
+            color_discrete_sequence=[CHART_COLORS["primary"]],
+        )
+        fig.update_layout(height=350, plot_bgcolor=CHART_COLORS["background"],
+                          xaxis=dict(range=[0, 1]))
+        fig.add_vline(x=0.1, line_dash="dash", line_color="#6b9090",
+                      annotation_text="Low threshold", annotation_position="top right")
+        fig.add_vline(x=0.5, line_dash="dash", line_color="#3d5a5a",
+                      annotation_text="High threshold", annotation_position="top right")
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    # Co-transcription: Binomial domain enrichment
+    @reactive.calc
+    def binomial_data():
+        rdir = results_dir()
+        if rdir:
+            return load_binomial_results(rdir)
+        return None
+
+    @render.ui
+    def binomial_bar_chart():
+        df = binomial_data()
+        if df is None or len(df) == 0:
+            return ui.p("No binomial analysis results. Run the binomial analysis pipeline step.")
+        # Filter to significant domains
+        if "p_adju" in df.columns:
+            sig = df.filter(pl.col("p_adju") < 0.05)
+        else:
+            sig = df
+        if len(sig) == 0:
+            return ui.p("No significantly enriched domains found.")
+        # Sort by p_scaled descending
+        if "p_scaled" in sig.columns:
+            sig = sig.sort("p_scaled", descending=True).head(20)
+        label_col = "V14" if "V14" in sig.columns else "V13" if "V13" in sig.columns else sig.columns[0]
+        score_col = "p_scaled" if "p_scaled" in sig.columns else "p_adju"
+        fig = px.bar(
+            sig.to_pandas(), x=score_col, y=label_col, orientation="h",
+            labels={score_col: "-10*log10(adj. p-value)", label_col: "Domain"},
+            color_discrete_sequence=[CHART_COLORS["primary"]],
+        )
+        fig.update_layout(height=400, yaxis={"categoryorder": "total ascending"},
+                          margin=dict(l=200), plot_bgcolor=CHART_COLORS["background"])
+        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+
+    @render.data_frame
+    def binomial_table():
+        df = binomial_data()
+        if df is None or len(df) == 0:
+            return None
+        if "p_adju" in df.columns:
+            df = df.filter(pl.col("p_adju") < 0.05)
+        if "p_scaled" in df.columns:
+            df = df.sort("p_scaled", descending=True)
+        return render.DataTable(df.to_pandas(), filters=True, height="400px")
 
     # Domain Annotations tab outputs
     @render.ui
@@ -1080,8 +1268,6 @@ def server(input, output, session):
         # Step 1: Base contig list from radio button
         if filter_type == "hits":
             contigs = get_contigs_with_hits(orfs, blast)
-        elif filter_type == "defense":
-            contigs = get_contigs_with_defense(orfs, defense_genes_df)
         else:
             contigs = get_contig_choices(orfs)
 
@@ -1153,32 +1339,43 @@ def server(input, output, session):
         if not contigs:
             filter_type = input.locus_filter_type()
             if filter_type == "hits":
-                ui.update_select("locus_contig_select", choices=["No contigs with hits"])
-            elif filter_type == "defense":
-                ui.update_select("locus_contig_select", choices=["No contigs with defense systems"])
+                ui.update_selectize("locus_contig_select", choices=["No contigs with hits"])
             else:
-                ui.update_select("locus_contig_select", choices=["No matching contigs"])
+                ui.update_selectize("locus_contig_select", choices=["No matching contigs"])
             return
 
-        ui.update_select("locus_contig_select", choices=contigs, selected=contigs[0])
+        ui.update_selectize("locus_contig_select", choices=contigs, selected=[contigs[0]])
 
     @reactive.calc
     def selected_contig_orfs():
-        """Get ORFs for the selected contig."""
+        """Get ORFs for the selected contig(s)."""
         orfs = orf_data()
-        contig_id = input.locus_contig_select()
+        selected = input.locus_contig_select()
 
-        if orfs is None or not contig_id or contig_id.startswith("No "):
+        if orfs is None or not selected:
             return None
 
-        return orfs.filter(pl.col("contig") == contig_id)
+        # Handle tuple/list from selectize multiple
+        selected_list = list(selected) if isinstance(selected, (tuple, list)) else [selected]
+        # Filter out placeholder values
+        selected_list = [c for c in selected_list if c and not c.startswith("No ")]
+        if not selected_list:
+            return None
+
+        return orfs.filter(pl.col("contig").is_in(selected_list))
 
     @render.text
     def locus_title():
-        contig_id = input.locus_contig_select()
-        if contig_id and not contig_id.startswith("No "):
-            return f"Locus View: {contig_id}"
-        return "Locus Viewer"
+        selected = input.locus_contig_select()
+        if not selected:
+            return "Locus Viewer"
+        selected_list = list(selected) if isinstance(selected, (tuple, list)) else [selected]
+        selected_list = [c for c in selected_list if c and not c.startswith("No ")]
+        if not selected_list:
+            return "Locus Viewer"
+        if len(selected_list) == 1:
+            return f"Locus View: {selected_list[0]}"
+        return f"Locus View: {len(selected_list)} contigs selected"
 
     @render.ui
     def locus_color_legend():
@@ -1187,9 +1384,14 @@ def server(input, output, session):
     @render.ui
     def locus_viewer_plot():
         orfs = orf_data()
-        contig_id = input.locus_contig_select()
+        selected = input.locus_contig_select()
 
-        if orfs is None or not contig_id or contig_id.startswith("No "):
+        if orfs is None or not selected:
+            return ui.p("Select a contig to view its locus structure.")
+
+        selected_list = list(selected) if isinstance(selected, (tuple, list)) else [selected]
+        selected_list = [c for c in selected_list if c and not c.startswith("No ")]
+        if not selected_list:
             return ui.p("Select a contig to view its locus structure.")
 
         # Get annotation data
@@ -1203,18 +1405,27 @@ def server(input, output, session):
         if cotx is not None and len(cotx) > 0:
             downstream_orfs = cotx["downstream_orf"].to_list()
 
-        # Create locus figure
-        fig = create_locus_figure(
-            orfs=orfs,
-            contig_id=contig_id,
-            hit_to_contig_mapping=mapping,
-            interproscan=interproscan,
-            defensefinder_genes=defense_genes,
-            downstream_orfs=downstream_orfs,
-            height=350,
-        )
+        # Generate one plot per contig, stack vertically
+        html_parts = []
+        for i, contig_id in enumerate(selected_list):
+            fig = create_locus_figure(
+                orfs=orfs,
+                contig_id=contig_id,
+                hit_to_contig_mapping=mapping,
+                interproscan=interproscan,
+                defensefinder_genes=defense_genes,
+                downstream_orfs=downstream_orfs,
+                height=350,
+            )
+            # Only include plotly.js for the first plot
+            include_js = "cdn" if i == 0 else False
+            html_parts.append(f'<div style="margin-bottom: 10px;">')
+            html_parts.append(fig.to_html(include_plotlyjs=include_js, full_html=False))
+            html_parts.append('</div>')
 
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        return ui.HTML(
+            f'<div style="max-height: 80vh; overflow-y: auto;">{"".join(html_parts)}</div>'
+        )
 
     @render.data_frame
     def locus_orf_table():

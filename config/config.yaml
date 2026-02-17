@@ -2,7 +2,7 @@
 # ===========================
 
 # Sample name (appended to output directories)
-sample_name: "efb0058_hits_test"
+sample_name: "efb0058_bacillota_withbinom_test"
 
 # Download settings (set enabled: false to use local genomes)
 download:
@@ -38,8 +38,8 @@ diamond:
 
 # InterProScan settings (requires manual installation)
 interproscan:
-  enabled: false
-  path: ""  # Set to your InterProScan installation path if enabled
+  enabled: true
+  path: "/Users/shelbyandersen/my_interproscan/interproscan-5.76-107.0/interproscan.sh"  # Set to your InterProScan installation path if enabled
   # Which analyses to run (comma-separated). Default: Pfam only for reliability.
   # Options: Pfam, TIGRFAM, SMART, CDD, SUPERFAMILY, Gene3D, Coils, ProSiteProfiles
   # Avoid: MobiDBLite, Panther (often have binary/dependency issues)
@@ -56,3 +56,8 @@ defensefinder:
   db_type: "unordered"      # Use unordered for contigs not ordered by genomic position
   coverage: 0.4             # Minimum coverage threshold
   workers: 4                # Number of parallel workers
+
+# Binomial domain enrichment analysis (optional)
+binomial:
+  enabled: true
+  whole_genome_interproscan: ""  # Path to pre-computed file, or empty to run via pipeline

@@ -23,9 +23,9 @@ else:
 # =============================================================================
 # IMPORTANT: rule all MUST be the first rule to be the default target
 # =============================================================================
-rule all:
-    """Final target rule - requests outputs from all phases."""
-    input:
+def get_all_targets(wildcards=None):
+    """Collect all target files, including optional binomial analysis."""
+    targets = [
         # Phase 1 outputs (steps 1-4)
         f"results/{SAMPLE}/blast_results/master_blast.txt",
         # Phase 2 outputs (steps 5-7)
@@ -34,6 +34,16 @@ rule all:
         # Phase 3 outputs (DefenseFinder and metrics)
         f"results/{SAMPLE}/defensefinder/defense_finder_systems.tsv",
         f"results/{SAMPLE}/metrics/pipeline_metrics.json",
+    ]
+    # Optional: Binomial domain enrichment analysis
+    if config.get("binomial", {}).get("enabled", False):
+        targets.append(f"results/{SAMPLE}/BinomialAnalysis.csv")
+    return targets
+
+rule all:
+    """Final target rule - requests outputs from all phases."""
+    input:
+        get_all_targets,
 
 
 # =============================================================================
@@ -95,3 +105,5 @@ include: "workflow/rules/cotranscription.smk"
 # Phase 3: DefenseFinder and metrics
 include: "workflow/rules/defensefinder.smk"
 include: "workflow/rules/metrics.smk"
+# Phase 4: Optional analyses
+include: "workflow/rules/binomial_analysis.smk"

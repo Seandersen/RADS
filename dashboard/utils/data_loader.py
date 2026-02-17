@@ -451,6 +451,44 @@ def load_defense_scores(results_dir: str) -> Optional[pl.DataFrame]:
         return None
 
 
+def load_binomial_results(results_dir: str) -> Optional[pl.DataFrame]:
+    """
+    Load pre-computed binomial domain enrichment results.
+
+    Returns DataFrame with columns:
+    - V13 (InterPro accession), V14 (description), p.value, p_adju, p_scaled, probability, n
+    """
+    binomial_file = Path(results_dir) / "BinomialAnalysis.csv"
+    if not binomial_file.exists():
+        return None
+
+    try:
+        if binomial_file.stat().st_size == 0:
+            return None
+
+        df = pl.read_csv(binomial_file, has_header=True)
+
+        # Cast numeric columns
+        for col in ["p.value", "p_adju", "p_scaled", "probability"]:
+            if col in df.columns:
+                df = df.with_columns(pl.col(col).cast(pl.Float64, strict=False))
+        if "n" in df.columns:
+            df = df.with_columns(pl.col("n").cast(pl.Int64, strict=False))
+
+        # Drop row index column if present (R writes row names)
+        if "" in df.columns:
+            df = df.drop("")
+        # Also handle unnamed first column
+        first_col = df.columns[0]
+        if first_col.startswith("Unnamed") or first_col == "":
+            df = df.drop(first_col)
+
+        return df
+    except Exception as e:
+        print(f"Error loading binomial results: {e}")
+        return None
+
+
 def load_pipeline_metrics(results_dir: str) -> Optional[dict]:
     """
     Load pipeline metrics JSON file.
