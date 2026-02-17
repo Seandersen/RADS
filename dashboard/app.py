@@ -224,68 +224,90 @@ app_ui = ui.page_sidebar(
     ui.navset_card_tab(
         ui.nav_panel(
             "Summary",
-            ui.layout_columns(
-                ui.value_box(
-                    "Total Genomes",
-                    ui.output_text("stat_genomes"),
-                    showcase=ui.HTML('<i class="fa-solid fa-dna" style="font-size: 2rem;"></i>'),
-                    theme="primary",
-                ),
-                ui.value_box(
-                    "BLAST Hits",
-                    ui.output_text("stat_blast_hits"),
-                    showcase=ui.HTML('<i class="fa-solid fa-bullseye" style="font-size: 2rem;"></i>'),
-                    theme="success",
-                ),
-                ui.value_box(
-                    "Genomes with Hits",
-                    ui.output_text("stat_genomes_hits"),
-                    showcase=ui.HTML('<i class="fa-solid fa-check" style="font-size: 2rem;"></i>'),
-                    theme="info",
-                ),
-                ui.value_box(
-                    "Hits per Mb",
-                    ui.output_text("stat_hits_per_mb"),
-                    showcase=ui.HTML('<i class="fa-solid fa-chart-line" style="font-size: 2rem;"></i>'),
-                    theme="secondary",
-                ),
-                col_widths=[3, 3, 3, 3],
-            ),
-            ui.layout_columns(
-                ui.value_box(
-                    "Defense Systems",
-                    ui.output_text("stat_defense_systems"),
-                    showcase=ui.HTML('<i class="fa-solid fa-shield" style="font-size: 2rem;"></i>'),
-                    theme="danger",
-                ),
-                ui.value_box(
-                    "Co-transcribed Pairs",
-                    ui.output_text("stat_cotx"),
-                    showcase=ui.HTML('<i class="fa-solid fa-link" style="font-size: 2rem;"></i>'),
-                    theme="warning",
-                ),
-                ui.value_box(
-                    ui.HTML('<span title="Ratio of unique defense systems to total contigs">Known Defense Systems per Contig</span>'),
-                    ui.output_text("stat_discovery_per_contig"),
-                    showcase=ui.HTML('<i class="fa-solid fa-magnifying-glass" style="font-size: 2rem;"></i>'),
-                    theme="light",
-                ),
-                ui.value_box(
-                    ui.HTML('<span title="Proportion of genomes with at least one defense system">Genomes with Known Defense (%)</span>'),
-                    ui.output_text("stat_discovery_per_genome"),
-                    showcase=ui.HTML('<i class="fa-solid fa-bacteria" style="font-size: 2rem;"></i>'),
-                    theme="dark",
-                ),
-                col_widths=[3, 3, 3, 3],
+            ui.card(
+                ui.card_header("Pipeline Results Breakdown"),
+                ui.output_ui("pipeline_breakdown_plot"),
+                full_screen=True,
             ),
             ui.layout_columns(
                 ui.card(
                     ui.card_header("Pipeline Overview"),
                     ui.output_ui("pipeline_status"),
                 ),
-                ui.card(
-                    ui.card_header("Hits per Genome"),
-                    ui.output_ui("hits_per_genome_plot"),
+                ui.layout_columns(
+                    ui.div(
+                        ui.value_box(
+                            "Total Genomes",
+                            ui.output_text("stat_genomes"),
+                            showcase=ui.HTML('<i class="fa-solid fa-dna" style="font-size: 2rem;"></i>'),
+                            theme="primary",
+                        ),
+                        title="Count of genomes in the genome manifest",
+                    ),
+                    ui.div(
+                        ui.value_box(
+                            "BLAST Hits",
+                            ui.output_text("stat_blast_hits"),
+                            showcase=ui.HTML('<i class="fa-solid fa-bullseye" style="font-size: 2rem;"></i>'),
+                            theme="success",
+                        ),
+                        title="Total rows in master BLAST results",
+                    ),
+                    ui.div(
+                        ui.value_box(
+                            "Genomes with Hits",
+                            ui.output_text("stat_genomes_hits"),
+                            showcase=ui.HTML('<i class="fa-solid fa-check" style="font-size: 2rem;"></i>'),
+                            theme="info",
+                        ),
+                        title="Number of unique genomes with at least one BLAST hit",
+                    ),
+                    ui.div(
+                        ui.value_box(
+                            "Hits per Mb",
+                            ui.output_text("stat_hits_per_mb"),
+                            showcase=ui.HTML('<i class="fa-solid fa-chart-line" style="font-size: 2rem;"></i>'),
+                            theme="secondary",
+                        ),
+                        title="BLAST hits divided by total input megabases",
+                    ),
+                    ui.div(
+                        ui.value_box(
+                            "Defense Systems",
+                            ui.output_text("stat_defense_systems"),
+                            showcase=ui.HTML('<i class="fa-solid fa-shield" style="font-size: 2rem;"></i>'),
+                            theme="danger",
+                        ),
+                        title="Count of unique defense system IDs from DefenseFinder",
+                    ),
+                    ui.div(
+                        ui.value_box(
+                            "Co-transcribed Pairs",
+                            ui.output_text("stat_cotx"),
+                            showcase=ui.HTML('<i class="fa-solid fa-link" style="font-size: 2rem;"></i>'),
+                            theme="warning",
+                        ),
+                        title="Number of co-transcribed gene pairs identified downstream of query hits",
+                    ),
+                    ui.div(
+                        ui.value_box(
+                            "Known Defense Systems per Contig",
+                            ui.output_text("stat_discovery_per_contig"),
+                            showcase=ui.HTML('<i class="fa-solid fa-magnifying-glass" style="font-size: 2rem;"></i>'),
+                            theme="light",
+                        ),
+                        title="Ratio of unique defense systems to total contigs",
+                    ),
+                    ui.div(
+                        ui.value_box(
+                            "Genomes with Known Defense (%)",
+                            ui.output_text("stat_discovery_per_genome"),
+                            showcase=ui.HTML('<i class="fa-solid fa-bacteria" style="font-size: 2rem;"></i>'),
+                            theme="dark",
+                        ),
+                        title="Proportion of genomes with at least one defense system",
+                    ),
+                    col_widths=[3, 3, 3, 3],
                 ),
                 col_widths=[4, 8],
             ),
@@ -471,23 +493,6 @@ app_ui = ui.page_sidebar(
                 ui.output_data_frame("locus_orf_table"),
                 full_screen=True,
             ),
-            ui.layout_columns(
-                ui.card(
-                    ui.card_header("Defense Score Distribution"),
-                    ui.output_ui("defense_score_histogram"),
-                    full_screen=True,
-                ),
-                ui.card(
-                    ui.card_header("Defense Score Summary"),
-                    ui.output_ui("defense_score_summary"),
-                ),
-                col_widths=[8, 4],
-            ),
-            ui.card(
-                ui.card_header("Defense Scores for Co-transcribed Genes"),
-                ui.output_data_frame("defense_scores_table"),
-                full_screen=True,
-            ),
         ),
         ui.nav_panel(
             "Domain Annotations",
@@ -503,6 +508,11 @@ app_ui = ui.page_sidebar(
                     full_screen=True,
                 ),
                 col_widths=[6, 6],
+            ),
+            ui.card(
+                ui.card_header("Binomial Domain Enrichment (All Domains)"),
+                ui.output_ui("domain_binomial_plot"),
+                full_screen=True,
             ),
             ui.card(
                 ui.card_header("InterProScan Results"),
@@ -560,7 +570,10 @@ app_ui = ui.page_sidebar(
 
 # Wrap with head content for CSS
 app_ui = ui.page_fluid(
-    ui.tags.head(ui.HTML(CUSTOM_CSS)),
+    ui.tags.head(
+        ui.HTML(CUSTOM_CSS),
+        ui.HTML('<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>'),
+    ),
     app_ui,
 )
 
@@ -802,32 +815,91 @@ def server(input, output, session):
         return ui.tags.ul([ui.tags.li(item) for item in items])
 
     @render.ui
-    def hits_per_genome_plot():
-        df = blast_data()
-        if df is None or len(df) == 0:
-            return ui.p("No BLAST data available. Run the pipeline first.")
+    def pipeline_breakdown_plot():
+        stats = summary_stats()
+        if not stats:
+            return ui.p("No pipeline results available.")
 
-        if "genome" not in df.columns:
-            return ui.p("No genome column in BLAST results.")
+        # Get defense system count same way the tile does
+        df_def = defensefinder_systems()
+        n_defense = 0
+        if df_def is not None and len(df_def) > 0 and "sys_id" in df_def.columns:
+            n_defense = df_def["sys_id"].n_unique()
 
-        try:
-            counts = df.group_by("genome").len().sort("len", descending=True)
-            fig = px.bar(
-                counts.to_pandas(),
-                x="genome",
-                y="len",
-                labels={"genome": "Genome", "len": "Hit Count"},
-                color_discrete_sequence=[CHART_COLORS["primary"]],
-            )
-            fig.update_layout(
-                xaxis_tickangle=-45,
-                margin=dict(b=100),
-                height=300,
-                plot_bgcolor=CHART_COLORS["background"],
-            )
-            return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
-        except Exception as e:
-            return ui.p(f"Error rendering hits per genome: {e}")
+        n_genomes = stats.get("total_genomes", 0)
+        n_hits = stats.get("total_blast_hits", 0)
+        n_genomes_hits = stats.get("genomes_with_hits", 0)
+        n_genomes_no_hits = n_genomes - n_genomes_hits
+        n_contigs = stats.get("total_contigs", 0)
+        n_orfs = stats.get("total_orfs", 0)
+        n_cotx = stats.get("cotranscribed_pairs", 0)
+        n_domains = stats.get("domain_annotations", 0)
+
+        # Nodes: Genomes -> Genomes with Hits / No Hits -> Contigs -> ORFs -> downstream outputs
+        #   0: Genomes
+        #   1: Genomes with Hits
+        #   2: Genomes without Hits
+        #   3: Extracted Contigs
+        #   4: ORFs
+        #   5: BLAST Hits
+        #   6: Co-transcribed Pairs
+        #   7: Defense Systems
+        #   8: Domain Annotations
+        node_labels = [
+            f"Genomes ({n_genomes})",
+            f"Genomes with Hits ({n_genomes_hits})",
+            f"No Hits ({n_genomes_no_hits})",
+            f"Extracted Contigs ({n_contigs})",
+            f"ORFs ({n_orfs})",
+            f"BLAST Hits ({n_hits})",
+            f"Co-transcribed Pairs ({n_cotx})",
+            f"Defense Systems ({n_defense})",
+            f"Domain Annotations ({n_domains})",
+        ]
+        node_colors = [
+            TEAL_PALETTE[0], TEAL_PALETTE[1], TEAL_PALETTE[7],
+            TEAL_PALETTE[2], TEAL_PALETTE[3],
+            TEAL_PALETTE[4], TEAL_PALETTE[5], TEAL_PALETTE[6], TEAL_PALETTE[8],
+        ]
+
+        # Links: source -> target with value
+        sources = [0, 0, 1, 3, 4, 4, 4]
+        targets = [1, 2, 3, 4, 5, 6, 7]
+        values =  [n_genomes_hits, max(n_genomes_no_hits, 1), n_contigs or n_genomes_hits,
+                   n_orfs or n_contigs, n_hits, n_cotx, n_defense]
+        # Add domain annotations link from ORFs if available
+        if n_domains > 0:
+            sources.append(4)
+            targets.append(8)
+            values.append(n_domains)
+
+        def hex_to_rgba(hex_color, alpha=0.4):
+            h = hex_color.lstrip("#")
+            r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+            return f"rgba({r},{g},{b},{alpha})"
+
+        link_colors = [hex_to_rgba(node_colors[t]) for t in targets]
+
+        import plotly.graph_objects as go
+        fig = go.Figure(data=[go.Sankey(
+            node=dict(
+                pad=20,
+                thickness=25,
+                label=node_labels,
+                color=node_colors,
+            ),
+            link=dict(
+                source=sources,
+                target=targets,
+                value=values,
+                color=link_colors,
+            ),
+        )])
+        fig.update_layout(
+            height=350,
+            margin=dict(t=20, b=20, l=20, r=20),
+        )
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
     # BLAST tab outputs
     @render.ui
@@ -846,7 +918,7 @@ def server(input, output, session):
             color_discrete_sequence=TEAL_PALETTE,
         )
         fig.update_layout(height=400, plot_bgcolor=CHART_COLORS["background"])
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
     @render.ui
     def identity_histogram():
@@ -862,7 +934,7 @@ def server(input, output, session):
             color_discrete_sequence=[CHART_COLORS["primary"]],
         )
         fig.update_layout(height=400, plot_bgcolor=CHART_COLORS["background"])
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
     @render.data_frame
     def blast_table():
@@ -886,7 +958,7 @@ def server(input, output, session):
             color_discrete_sequence=[CHART_COLORS["secondary"]],
         )
         fig.update_layout(height=350, plot_bgcolor=CHART_COLORS["background"])
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
     @render.ui
     def orfs_per_contig_plot():
@@ -912,7 +984,7 @@ def server(input, output, session):
             height=350,
             plot_bgcolor=CHART_COLORS["background"],
         )
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
     @render.data_frame
     def orf_table():
@@ -949,7 +1021,7 @@ def server(input, output, session):
             color_discrete_sequence=[CHART_COLORS["tertiary"]],
         )
         fig.update_layout(height=300, plot_bgcolor=CHART_COLORS["background"])
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
     # Co-transcription: Domain annotations for co-transcribed genes
     @render.ui
@@ -980,7 +1052,7 @@ def server(input, output, session):
         )
         fig.update_layout(height=400, yaxis={"categoryorder": "total ascending"},
                           margin=dict(l=200), plot_bgcolor=CHART_COLORS["background"])
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
     @render.data_frame
     def cotx_domain_table():
@@ -1052,7 +1124,7 @@ def server(input, output, session):
                       annotation_text="Low threshold", annotation_position="top right")
         fig.add_vline(x=0.5, line_dash="dash", line_color="#3d5a5a",
                       annotation_text="High threshold", annotation_position="top right")
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
     # Co-transcription: Binomial domain enrichment
     @reactive.calc
@@ -1126,7 +1198,7 @@ def server(input, output, session):
         )
         fig.update_layout(height=400, yaxis={"categoryorder": "total ascending"},
                           margin=dict(l=200), plot_bgcolor=CHART_COLORS["background"])
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
     @render.data_frame
     def binomial_table():
@@ -1175,7 +1247,7 @@ def server(input, output, session):
             margin=dict(l=200),
             plot_bgcolor=CHART_COLORS["background"],
         )
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
     @render.ui
     def analysis_type_plot():
@@ -1196,7 +1268,45 @@ def server(input, output, session):
             color_discrete_sequence=TEAL_PALETTE,
         )
         fig.update_layout(height=400)
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
+
+    @render.ui
+    def domain_binomial_plot():
+        df = binomial_data()
+        if df is None or len(df) == 0:
+            return ui.p("No binomial enrichment results available. Run the binomial analysis pipeline first.")
+
+        # Filter to significant domains
+        if "p_adju" in df.columns:
+            sig = df.filter(pl.col("p_adju") < 0.05)
+        else:
+            sig = df
+
+        if len(sig) == 0:
+            return ui.p("No significantly enriched domains found (adjusted p < 0.05).")
+
+        # Sort by p_scaled descending and take top 20
+        if "p_scaled" in sig.columns:
+            sig = sig.sort("p_scaled", descending=True).head(20)
+
+        label_col = "V14" if "V14" in sig.columns else "V13" if "V13" in sig.columns else sig.columns[0]
+        score_col = "p_scaled" if "p_scaled" in sig.columns else "p_adju"
+
+        fig = px.bar(
+            sig.to_pandas(),
+            x=score_col,
+            y=label_col,
+            orientation="h",
+            labels={score_col: "-10*log10(adj. p-value)", label_col: "Domain"},
+            color_discrete_sequence=[CHART_COLORS["secondary"]],
+        )
+        fig.update_layout(
+            height=500,
+            yaxis={"categoryorder": "total ascending"},
+            margin=dict(l=250),
+            plot_bgcolor=CHART_COLORS["background"],
+        )
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
     @render.data_frame
     def interproscan_table():
@@ -1261,7 +1371,7 @@ def server(input, output, session):
             margin=dict(b=100),
             plot_bgcolor=CHART_COLORS["background"],
         )
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
     @render.ui
     def defense_subtype_plot():
@@ -1292,7 +1402,7 @@ def server(input, output, session):
             margin=dict(l=150),
             plot_bgcolor=CHART_COLORS["background"],
         )
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
     @render.data_frame
     def defense_genes_table():
@@ -1550,10 +1660,8 @@ def server(input, output, session):
                 downstream_orfs=downstream_orfs,
                 height=350,
             )
-            # Only include plotly.js for the first plot
-            include_js = "cdn" if i == 0 else False
             html_parts.append(f'<div style="margin-bottom: 10px;">')
-            html_parts.append(fig.to_html(include_plotlyjs=include_js, full_html=False))
+            html_parts.append(fig.to_html(include_plotlyjs=False, full_html=False))
             html_parts.append('</div>')
 
         return ui.HTML(
@@ -1570,104 +1678,6 @@ def server(input, output, session):
             contig_orfs.to_pandas(),
             filters=True,
             height="300px"
-        )
-
-    # ==================== Defense Scores (Locus Tab) ====================
-
-    @render.ui
-    def defense_score_histogram():
-        df = defense_scores_data()
-        if df is None or len(df) == 0:
-            return ui.p("No defense scores available. Run defense_score.py on pipeline results.")
-
-        # Filter by currently filtered contigs
-        contigs = filtered_contigs()
-        if contigs and "contig" in df.columns:
-            df = df.filter(pl.col("contig").is_in(contigs))
-
-        # Filter to rows with numeric defense_score
-        scored = df.filter(pl.col("defense_score").is_not_null())
-        if len(scored) == 0:
-            return ui.p("No scored genes (DefenseFinder may not have run).")
-
-        fig = px.histogram(
-            scored.to_pandas(),
-            x="defense_score",
-            nbins=20,
-            labels={"defense_score": "Defense Score"},
-            color_discrete_sequence=[CHART_COLORS["primary"]],
-        )
-        fig.update_layout(
-            height=350,
-            plot_bgcolor=CHART_COLORS["background"],
-            xaxis=dict(range=[0, 1]),
-        )
-        fig.add_vline(x=0.1, line_dash="dash", line_color="#6b9090",
-                      annotation_text="Low threshold", annotation_position="top right")
-        fig.add_vline(x=0.5, line_dash="dash", line_color="#3d5a5a",
-                      annotation_text="High threshold", annotation_position="top right")
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
-
-    @render.ui
-    def defense_score_summary():
-        df = defense_scores_data()
-        if df is None or len(df) == 0:
-            return ui.p("No defense scores available.")
-
-        total = len(df)
-        scored = df.filter(pl.col("defense_score").is_not_null())
-        na_count = total - len(scored)
-
-        items = [f"Total co-transcribed genes: {total}"]
-
-        if na_count > 0:
-            items.append(f"Genes with NA scores: {na_count}")
-
-        if len(scored) > 0:
-            scores = scored["defense_score"]
-            mean_score = scores.mean()
-            median_score = scores.median()
-            low = scored.filter(pl.col("defense_score") < 0.1).height
-            high = scored.filter(pl.col("defense_score") >= 0.5).height
-
-            items.extend([
-                f"Mean score: {mean_score:.3f}",
-                f"Median score: {median_score:.3f}",
-                f"Low score (<0.1): {low} ({100*low/len(scored):.0f}%)",
-                f"High score (>=0.5): {high} ({100*high/len(scored):.0f}%)",
-            ])
-
-        return ui.tags.ul([ui.tags.li(item) for item in items])
-
-    @render.data_frame
-    def defense_scores_table():
-        df = defense_scores_data()
-        if df is None or len(df) == 0:
-            return None
-
-        # Filter by currently filtered contigs
-        contigs = filtered_contigs()
-        if contigs and "contig" in df.columns:
-            df = df.filter(pl.col("contig").is_in(contigs))
-
-        if len(df) == 0:
-            return None
-
-        # Select key display columns
-        display_cols = [
-            col for col in [
-                "downstream_orf", "blast_hit_id", "contig", "defense_score",
-                "proximity_score", "density_score", "nearest_defense_gene",
-                "nearest_defense_type", "nearest_distance_bp",
-                "defense_genes_in_window", "interpro_domains",
-            ]
-            if col in df.columns
-        ]
-
-        return render.DataTable(
-            df.select(display_cols).to_pandas(),
-            filters=True,
-            height="400px",
         )
 
     # ==================== Defense Locus Viewer ====================
@@ -1754,7 +1764,7 @@ def server(input, output, session):
             height=350,
         )
 
-        return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
 
 app = App(app_ui, server)
