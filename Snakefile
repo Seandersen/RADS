@@ -38,6 +38,9 @@ def get_all_targets(wildcards=None):
     # Optional: Binomial domain enrichment analysis
     if config.get("binomial", {}).get("enabled", False):
         targets.append(f"results/{SAMPLE}/BinomialAnalysis.csv")
+    # Defense scores (requires binomial + defensefinder)
+    if config.get("binomial", {}).get("enabled", False):
+        targets.append(f"results/{SAMPLE}/defense_scores.tsv")
     return targets
 
 rule all:
@@ -107,3 +110,4 @@ include: "workflow/rules/defensefinder.smk"
 include: "workflow/rules/metrics.smk"
 # Phase 4: Optional analyses
 include: "workflow/rules/binomial_analysis.smk"
+include: "workflow/rules/defense_score.smk"

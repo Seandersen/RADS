@@ -156,10 +156,12 @@ def run_binomial_analysis(contigs_ips_path: str, genomes_ips_path: str, output_p
     if valid_mask.sum() > 0:
         _, p_adju[valid_mask], _, _ = multipletests(p_values[valid_mask], method="fdr_bh")
 
-    # Scaled p-value: -10 * log10(p_adju)
+    # Scaled p-value: -10 * log10(p_adju), cap zeros at smallest representable
     with np.errstate(divide="ignore", invalid="ignore"):
-        p_scaled = -10 * np.log10(p_adju)
-    p_scaled = np.where(np.isinf(p_scaled), np.nan, p_scaled)
+        # Replace exact 0 with smallest float to avoid inf
+        p_adju_safe = np.where(p_adju == 0, np.finfo(float).tiny, p_adju)
+        p_scaled = -10 * np.log10(p_adju_safe)
+    p_scaled = np.where(np.isinf(p_scaled) | np.isnan(p_adju), np.nan, p_scaled)
 
     results_df = results_df.with_columns([
         pl.Series("p_adju", p_adju),
