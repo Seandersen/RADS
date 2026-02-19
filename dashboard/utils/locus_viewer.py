@@ -302,7 +302,18 @@ def create_locus_figure(
         # Check if it's a downstream co-transcribed gene
         elif orf_id in downstream_orf_set:
             color = DOWNSTREAM_COLOR
-            annotation_text = "Co-transcribed downstream"
+            if orf_id in ips_lookup:
+                domains = ips_lookup[orf_id]
+                seen = set()
+                unique_descs = []
+                for d in domains:
+                    key = (d.get("analysis", ""), d.get("signature_desc", "Unknown"))
+                    if key not in seen:
+                        seen.add(key)
+                        unique_descs.append(f"{key[0]}: {key[1]}")
+                annotation_text = "<br>".join(unique_descs) if unique_descs else "Co-transcribed downstream"
+            else:
+                annotation_text = "Co-transcribed downstream"
 
         # Check DefenseFinder annotations
         elif orf_id in defense_lookup:
@@ -429,6 +440,7 @@ def create_defense_locus_figure(
     contig_id: str,
     defensefinder_genes: pl.DataFrame,
     defensefinder_systems: Optional[pl.DataFrame] = None,
+    hit_to_contig_mapping: Optional[pl.DataFrame] = None,
     height: int = 350,
 ) -> go.Figure:
     """
@@ -440,6 +452,7 @@ def create_defense_locus_figure(
         contig_id: Contig to visualize
         defensefinder_genes: DefenseFinder gene annotations
         defensefinder_systems: DefenseFinder system information (for boundaries)
+        hit_to_contig_mapping: Mapping of query hits to contig ORFs
         height: Figure height
 
     Returns:
@@ -469,6 +482,11 @@ def create_defense_locus_figure(
                     "subtype": row.get("subtype", ""),
                 }
 
+    # Build query hit set
+    query_hit_orfs = set()
+    if hit_to_contig_mapping is not None and len(hit_to_contig_mapping) > 0:
+        query_hit_orfs = set(hit_to_contig_mapping["contig_orf_id"].to_list())
+
     fig = go.Figure()
 
     # Calculate x-axis range
@@ -489,8 +507,12 @@ def create_defense_locus_figure(
         end = row["end"]
         strand = row["strand"]
 
+        # Check query hits first (highest priority)
+        if orf_id in query_hit_orfs:
+            color = QUERY_HIT_COLOR
+            annotation_text = "Query Hit (Recombinase)"
         # Check DefenseFinder annotations
-        if orf_id in defense_lookup:
+        elif orf_id in defense_lookup:
             defense_info = defense_lookup[orf_id]
             defense_type = defense_info.get("type", "Unknown")
             defense_types_found.add(defense_type)
@@ -542,6 +564,18 @@ def create_defense_locus_figure(
     # Add hover traces
     for trace in hover_traces:
         fig.add_trace(trace)
+
+    # Add query hit legend entry if any query hits are present
+    if query_hit_orfs:
+        fig.add_trace(
+            go.Scatter(
+                x=[None], y=[None],
+                mode="markers",
+                marker=dict(size=15, color=QUERY_HIT_COLOR, symbol="square"),
+                name="Query Hit (Recombinase)",
+                showlegend=True,
+            )
+        )
 
     # Add legend traces for defense types found
     for dtype in sorted(defense_types_found):

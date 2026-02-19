@@ -1749,6 +1749,7 @@ def server(input, output, session):
         contig_id = input.defense_contig_select()
         defense_genes = defensefinder_genes()
         defense_systems = defensefinder_systems()
+        mapping = hit_to_contig_mapping()
 
         if orfs is None or not contig_id or contig_id.startswith("No "):
             return ui.p("Select a contig to view defense system locus.")
@@ -1761,6 +1762,7 @@ def server(input, output, session):
             contig_id=contig_id,
             defensefinder_genes=defense_genes,
             defensefinder_systems=defense_systems,
+            hit_to_contig_mapping=mapping,
             height=350,
         )
 
