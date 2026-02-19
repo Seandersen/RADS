@@ -9,7 +9,7 @@ RADS was developed by Shelby E Andersen in collaboration with Joshua M Kirsch, J
 - **Automated genome download** from NCBI using accession lists
 - **Parallel processing** of hundreds of genomes
 - **Defense system detection** via DefenseFinder integration
-- **Domain annotation** via InterProScan (optional)
+- **Domain annotation** via InterProScan
 - **Co-transcription analysis** to identify nearby genes
 - **Interactive dashboard** for exploring results
 - **Reproducible environments** via Pixi/Conda
