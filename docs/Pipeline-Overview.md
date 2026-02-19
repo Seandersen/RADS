@@ -48,6 +48,13 @@ This page explains each step of the RADS Snakemake pipeline in detail.
 │  (domains)  │ │  Analysis   │ │  (defense)  │
 └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
        │               │               │
+       │          ┌────┴────┐          │
+       │          ▼         ▼          │
+       │   ┌──────────┐ ┌──────────┐  │
+       │   │ Defense  │ │ Binomial │  │
+       │   │  Score   │ │ Analysis │  │
+       │   └──────────┘ └──────────┘  │
+       │               │               │
        └───────────────┼───────────────┘
                        ▼
               ┌─────────────────┐
@@ -176,7 +183,7 @@ Extracts flanking genomic regions around each BLAST hit.
 
 **Process:**
 1. Parse BLAST hits to get hit coordinates
-2. Calculate upstream/downstream boundaries
+2. Calculate upstream/downstream boundaries using `upstream_nt` and `downstream_nt` config values
 3. Handle chromosome boundaries (no wraparound)
 4. Extract sequences using BED coordinates
 
@@ -203,7 +210,7 @@ Predicts ORFs in extracted contigs using Prodigal.
 **Rule:** `run_interproscan`
 **Location:** `workflow/rules/process_orfs.smk`
 
-Annotates protein domains using InterProScan.
+Annotates protein domains in contig ORFs using InterProScan.
 
 **Input:**
 - `results/{sample}/contig_orfs/interproscan_input.faa`
@@ -214,38 +221,39 @@ Annotates protein domains using InterProScan.
 **Tools:** InterProScan
 
 **Notes:**
-- Requires separate InterProScan installation
-- Creates empty file if disabled or unavailable
-- Excludes PRINTS database (faster)
+- Requires separate InterProScan installation; set path in `config.yaml`
+- Creates an empty file if disabled or unavailable
+- Excludes the PRINTS database for speed
+- Results are used by the locus viewer, domain annotations tab, co-transcription tab, and binomial analysis
 
 ### Step 9: Co-transcription Analysis
 
 **Rules:** `map_blast_hits_to_contig_orfs`, `identify_downstream_orfs`, `extract_cotranscribed_sequences`
 **Location:** `workflow/rules/cotranscription.smk`
 
-Identifies genes immediately downstream of query hits that may be co-transcribed.
+Identifies genes immediately downstream of query hits on the same strand that are likely co-transcribed.
 
 **Process:**
-1. Map original BLAST hits to contig ORFs by matching coordinates
-2. For each hit, find the next ORF on the same strand
-3. Check if within distance threshold
-4. Extract sequences of co-transcribed ORFs
+1. Map original BLAST hit coordinates to contig ORFs (coordinate matching, ±3 bp tolerance)
+2. For each mapped hit, find the immediately adjacent ORF on the same strand
+3. Retain pairs where the intergenic gap is within `distance_threshold`
+4. Extract protein sequences of co-transcribed ORFs
 
 **Output:**
-- `results/{sample}/cotranscription/hit_to_contig_mapping.tsv`
-- `results/{sample}/cotranscription/downstream_orf_ids.txt`
-- `results/{sample}/cotranscription/cotranscribed_details.txt`
-- `results/{sample}/cotranscription/cotranscribed_sequences.faa`
+- `results/{sample}/cotranscription/hit_to_contig_mapping.tsv` - BLAST hit → contig ORF mapping
+- `results/{sample}/cotranscription/downstream_orf_ids.txt` - IDs of co-transcribed ORFs
+- `results/{sample}/cotranscription/cotranscribed_details.txt` - Full pair details
+- `results/{sample}/cotranscription/cotranscribed_sequences.faa` - Co-transcribed protein sequences
 
 **Parameters:**
-- `distance_threshold`: Maximum bp between genes (default: 100)
+- `distance_threshold`: Maximum intergenic gap in bp (default: 100)
 
 ### Step 10: DefenseFinder (Optional)
 
 **Rule:** `run_defensefinder`
 **Location:** `workflow/rules/defensefinder.smk`
 
-Detects bacterial defense systems using DefenseFinder.
+Detects bacterial defense systems in contig ORFs using DefenseFinder (MacSyFinder).
 
 **Input:**
 - `results/{sample}/contig_orfs/all_contigs.faa`
@@ -258,10 +266,84 @@ Detects bacterial defense systems using DefenseFinder.
 **Tools:** DefenseFinder, MacSyFinder
 
 **Notes:**
-- Uses "unordered" mode since contigs aren't in genomic order
+- Uses "unordered" mode since contigs are extracted fragments, not full chromosomes
 - Gracefully handles missing dependencies
 
-### Step 11: Calculate Metrics
+## Phase 4: Scoring and Enrichment
+
+### Step 11: Calculate Defense Scores
+
+**Rule:** `calculate_defense_scores`
+**Location:** `workflow/rules/defense_score.smk`
+**Script:** `defense_score.py`
+
+Scores each co-transcribed downstream gene based on its spatial association with known defense systems. This is run independently of the binomial analysis and does not require it.
+
+**Inputs:**
+- `results/{sample}/cotranscription/cotranscribed_details.txt`
+- `results/{sample}/defensefinder/defense_finder_genes.tsv`
+- `results/{sample}/contig_orfs/all_contigs.faa`
+- `results/{sample}/interproscan_results.tsv` (if available)
+
+**Output:**
+- `results/{sample}/defense_scores.tsv`
+
+**Scoring logic:**
+
+The defense score quantifies how closely associated a co-transcribed gene is with known defense systems on the same contig. It combines two components:
+
+1. **Proximity**: Distance (in genes) from the co-transcribed ORF to the nearest DefenseFinder-annotated gene on the same contig
+2. **Local density**: Fraction of genes within a sliding window that are defense genes
+
+A **low score** indicates that the co-transcribed gene is spatially isolated from known defense systems — these are candidates that would be missed by traditional defense island detection methods. A **high score** indicates the gene sits within or immediately adjacent to a known defense cluster.
+
+Scores are reported in the range 0–1 and visualized as a distribution in the Co-transcription tab of the dashboard.
+
+### Step 12: Binomial Domain Enrichment Analysis (Optional)
+
+**Rules:** `extract_genomes_with_hits`, `translate_genomes_for_binomial`, `clean_proteins_for_binomial`, `run_whole_genome_interproscan`, `run_binomial_analysis`
+**Location:** `workflow/rules/binomial_analysis.smk`
+**Script:** `workflow/scripts/binomial_analysis.py`
+
+Identifies Pfam domains that are statistically enriched in the extracted contigs (flanking regions around query hits) compared to the background frequency in the full genomes that contained hits.
+
+**Enable in config:**
+```yaml
+binomial:
+  enabled: true
+```
+
+**Process:**
+1. Collect all genomes that produced at least one BLAST hit
+2. Combine and translate all proteins from those genomes (Prodigal)
+3. Run InterProScan on the whole-genome protein set (or provide a precomputed TSV via `whole_genome_interproscan` in config)
+4. Filter both contig and whole-genome annotations to Pfam domains only
+5. For each Pfam domain observed in the contigs:
+   - Count occurrences in contigs (*k*)
+   - Count total occurrences in whole genomes (*n*)
+   - Estimate background rate (*p* = whole-genome Pfam frequency)
+   - Compute one-sided binomial test: P(X ≥ k | n, p)
+6. Apply Benjamini-Hochberg multiple testing correction
+
+**Output:**
+- `results/{sample}/binomial/genomes_with_hits.fna` - Combined genome sequences
+- `results/{sample}/binomial/genomes_with_hits.faa` - Translated proteins
+- `results/{sample}/binomial/interproscan_wholegenomes.tsv` - Whole-genome domain annotations
+- `results/{sample}/BinomialAnalysis.csv` - Enrichment results
+
+**BinomialAnalysis.csv columns:**
+| Column | Description |
+|--------|-------------|
+| interpro_id | Pfam domain accession |
+| description | Domain description |
+| contig_count | Occurrences in extracted contigs |
+| genome_count | Occurrences in whole genomes |
+| p_value | Binomial test p-value |
+| adjusted_p_value | Benjamini-Hochberg corrected p-value |
+
+Results are displayed in both the Co-transcription tab (focused on co-transcribed genes) and the Domain Annotations tab (all contig ORFs) of the dashboard.
+
+### Step 13: Calculate Metrics
 
 **Rule:** `calculate_metrics`
 **Location:** `workflow/rules/metrics.smk`
@@ -315,7 +397,7 @@ results/{sample_name}/
 ├── contig_orfs/
 │   ├── all_contigs.faa          # ORFs from contigs
 │   └── interproscan_input.faa   # Cleaned for InterProScan
-├── interproscan_results.tsv     # Domain annotations
+├── interproscan_results.tsv     # Domain annotations (contig ORFs)
 ├── cotranscription/
 │   ├── hit_to_contig_mapping.tsv
 │   ├── downstream_orf_ids.txt
@@ -325,6 +407,12 @@ results/{sample_name}/
 │   ├── defense_finder_systems.tsv
 │   ├── defense_finder_genes.tsv
 │   └── defense_finder_hmmer.tsv
+├── defense_scores.tsv           # Defense association scores for co-transcribed genes
+├── binomial/                    # (if binomial.enabled: true)
+│   ├── genomes_with_hits.fna
+│   ├── genomes_with_hits.faa
+│   └── interproscan_wholegenomes.tsv
+├── BinomialAnalysis.csv         # Pfam enrichment results (if binomial enabled)
 ├── metrics/
 │   ├── total_genome_size.txt
 │   └── pipeline_metrics.json
@@ -333,7 +421,7 @@ results/{sample_name}/
 
 ## Running Individual Steps
 
-You can run specific pipeline steps:
+You can run specific pipeline steps by naming their output files:
 
 ```bash
 # Just download genomes
@@ -344,6 +432,12 @@ pixi run snakemake results/{sample}/blast_results/master_blast.txt --cores 8
 
 # Run DefenseFinder specifically
 pixi run snakemake results/{sample}/defensefinder/defense_finder_systems.tsv --cores 4
+
+# Run defense scoring (requires co-transcription and DefenseFinder to be complete)
+pixi run snakemake results/{sample}/defense_scores.tsv --cores 4
+
+# Run binomial analysis (requires interproscan and co-transcription; binomial must be enabled)
+pixi run snakemake results/{sample}/BinomialAnalysis.csv --cores 8
 ```
 
 ## Parallelization

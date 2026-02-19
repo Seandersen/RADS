@@ -67,53 +67,52 @@ screen -r dashboard
 
 ## Dashboard Overview
 
-The dashboard has a sidebar for controls and tabbed panels for different views. The interface uses a coordinated teal/slate color palette throughout.
+The dashboard has a sidebar for global controls and seven tabbed panels for different views. The interface uses a coordinated teal/slate color palette throughout.
 
 ### Sidebar Controls
 
 | Control | Description |
 |---------|-------------|
 | **Select Sample** | Choose which analysis to view |
-| **Min % Identity** | Filter BLAST hits by identity |
-| **Min Alignment Length** | Filter by alignment length |
+| **Min % Identity** | Filter BLAST hits by minimum percent identity |
+| **Min Alignment Length** | Filter BLAST hits by minimum alignment length |
 | **Download BLAST Results** | Export filtered results as CSV |
+
+All visualizations update in real-time as filters are adjusted.
 
 ## Dashboard Tabs
 
 ### 1. Summary Tab
 
-Provides an overview of the pipeline results.
+Provides a high-level overview of the pipeline run.
 
 #### Value Boxes
 
 | Metric | Description |
 |--------|-------------|
 | Total Genomes | Number of genomes processed |
-| BLAST Hits | Total query matches found |
+| BLAST Hits | Total query matches found (after filtering) |
 | Genomes with Hits | Genomes containing at least one hit |
+| Hits per Mb | BLAST hit density (hits per megabase of input sequence) |
+| Defense Systems | Defense systems detected by DefenseFinder |
 | Co-transcribed Pairs | Downstream gene pairs identified |
-| Defense Systems | Defense systems detected (if DefenseFinder enabled) |
-| Hits per Mb | BLAST hit density (hits per megabase) |
-| Discovery Rate (per contig) | Defense systems per contig |
-| Discovery Rate (per genome) | Defense systems per genome |
+| Discovery Rate (per contig) | Known defense systems per contig with a hit |
+| Discovery Rate (per genome) | Fraction of hit-containing genomes with a defense system |
 
 #### Pipeline Overview
 
-Shows:
-- Genomes processed
-- Total ORFs found
-- Extracted contigs
-- Domain annotations
-- Query information
-- Total input size
+Text summary of key pipeline statistics, including total genomes, ORFs, contigs, annotations, and query information.
 
-#### Hits per Genome Chart
+#### Pipeline Results Breakdown
 
-Bar chart showing the distribution of BLAST hits across genomes.
+A Sankey diagram showing how data flows through the pipeline:
+- Genomes → Genomes with Hits / No Hits
+- Hits → Contigs → ORFs
+- ORFs → BLAST Hits / Co-transcribed Pairs / Defense Systems / Domain Annotations
 
 ### 2. BLAST Results Tab
 
-Detailed exploration of BLAST search results.
+Detailed exploration of Diamond BLAST search results.
 
 #### Identity vs Length Scatter Plot
 
@@ -159,7 +158,7 @@ Histogram showing the size distribution of predicted ORFs in extracted contigs.
 
 #### ORFs per Contig
 
-Bar chart showing how many ORFs were predicted in each contig.
+Bar chart showing how many ORFs were predicted in each contig, with a median line.
 
 #### ORF Details Table
 
@@ -172,103 +171,130 @@ Interactive table with ORF information:
 
 ### 4. Co-transcription Tab
 
-Analysis of potentially co-transcribed gene pairs.
+Analysis of genes immediately downstream of query hits that are likely co-transcribed, along with statistical enrichment and defense association scoring.
 
 #### Co-transcribed Gene Pairs Table
 
-Shows genes immediately downstream of query hits:
+Shows genes immediately downstream of query hits on the same strand and within the distance threshold:
 
 | Column | Description |
 |--------|-------------|
-| blast_hit_id | Original BLAST hit |
-| hit_contig_orf | Hit ORF in extracted contig |
-| downstream_orf | Co-transcribed gene |
-| strand | Strand orientation |
-| distance | Gap between genes (bp) |
+| blast_hit_id | Original BLAST hit identifier |
+| hit_contig_orf | Query hit ORF in extracted contig |
+| downstream_orf | Co-transcribed downstream gene |
+| strand | Strand orientation (+1 / -1) |
+| distance | Intergenic gap between genes (bp) |
 
 #### Distance Distribution
 
-Histogram of intergenic distances for co-transcribed pairs.
+Histogram of intergenic distances for all co-transcribed pairs.
+
+#### Domain Annotations for Co-transcribed Genes
+
+Horizontal bar chart and table showing which InterProScan domains are found in co-transcribed genes, along with annotation source (Pfam, TIGRFAM, CDD, etc.).
+
+#### DefenseFinder Hits in Co-transcribed Genes
+
+Summary and table of co-transcribed genes that are also annotated as defense genes by DefenseFinder. These represent cases where the query hit is directly adjacent to a known defense system.
+
+#### Defense Score Distribution
+
+Plot of defense scores for all co-transcribed genes. The defense score quantifies how associated a co-transcribed gene is with nearby defense systems based on spatial proximity and local defense gene density. Low scores indicate genes that are isolated from known defense islands and would be missed by traditional proximity-based detection.
+
+See [Pipeline Overview](Pipeline-Overview.md#step-12-calculate-defense-scores) for details on how the score is calculated.
+
+#### Binomial Domain Enrichment
+
+Bar chart and table of Pfam domains that are statistically enriched in the extracted contigs compared to whole-genome background frequencies. Domains are ranked by adjusted p-value (Benjamini-Hochberg correction). Only available when the binomial analysis step is enabled in the pipeline.
 
 ### 5. Locus Viewer Tab
 
 Interactive gene arrow diagrams for visualizing genomic loci around query hits.
 
-#### Contig Selection
-
-Use the sidebar controls to filter and select contigs:
+#### Sidebar Controls
 
 | Control | Description |
 |---------|-------------|
-| **Filter contigs by** | Choose viewing mode |
+| **Filter contigs by** | Choose viewing scope |
 | - All contigs | Show all extracted contigs |
 | - Contigs with query hits | Show contigs containing recombinase hits |
 | - Contigs with defense systems | Show contigs with DefenseFinder annotations |
-| **Select contig** | Choose specific contig to visualize |
+| **Select / Deselect All** | Quickly select or clear the contig list |
+| **Select contig(s)** | Choose one or more specific contigs to visualize |
+| **Defense Score Range** | Show only contigs whose co-transcribed genes fall within the selected score range (0–1) |
+| **Binomial p-value threshold** | Filter contigs to those with at least one co-transcribed gene whose top domain meets the enrichment threshold |
+| **Only co-transcribed genes** | Highlight contigs that have at least one co-transcribed downstream gene |
+| **Only defense systems** | Highlight contigs that have at least one DefenseFinder defense gene |
+| **Only MGEs** | Highlight contigs with mobile genetic element domain annotations |
+| **Defense type filter** | Filter to contigs containing specific defense system types |
+| **Reset Filters** | Clear all locus filters back to defaults |
 
 #### Locus Visualization
 
-The locus viewer displays genes as directional arrows showing:
-- **Gene position**: Horizontal placement indicates genomic coordinates
-- **Gene direction**: Arrow direction shows strand orientation (→ forward, ← reverse)
-- **Gene function**: Color coding indicates annotation type
+Genes are drawn as directional arrows:
+- **Position**: Horizontal placement reflects genomic coordinates
+- **Direction**: Arrow orientation shows strand (→ forward, ← reverse)
+- **Color**: Indicates gene annotation type (see color legend below)
+
+Multiple contigs can be selected and are stacked vertically, each in its own panel.
 
 #### Color Legend
 
 | Color | Description |
 |-------|-------------|
-| **Dark teal** | Query hits (recombinases) |
-| **Medium teal** | Co-transcribed downstream genes |
-| **Light gray-teal** | Unannotated genes |
-| **Teal gradient** | Domain annotations (varies by database) |
+| **Dark teal-black** | Query hits (recombinases) — highest priority |
+| **Medium green-teal** | Co-transcribed downstream genes |
+| **Light blue-teal** | DefenseFinder defense system genes |
+| **Dark slate-blue** | Mobile genetic elements (transposases, integrases, etc.) |
+| **Gray** | Other InterProScan domain annotations |
+| **White** | Unannotated genes |
 
-#### Gene Information
+#### Hover Annotations
 
-Hover over any gene arrow to see detailed information:
+Hovering over any gene arrow shows:
 - ORF ID
-- Start/end coordinates
-- Strand orientation
-- Domain annotations (if available)
-- Defense system association (if applicable)
+- Genomic coordinates (start–end)
+- Strand
+- Gene length
+- **Annotation**: For co-transcribed genes, lists all InterProScan domain hits found for that gene (database and description, one per line). Falls back to "Co-transcribed downstream" if no domain annotations are available. For other gene types, shows the relevant annotation label.
 
 #### ORF Details Table
 
-Below the locus diagram, a table displays all ORFs in the selected contig with:
-- ORF ID
-- Contig name
-- Start/end positions
-- Strand
-- Length
+Below the locus diagram, a table lists all ORFs in the selected contig with their coordinates, strand, and length.
 
 ### 6. Domain Annotations Tab
 
-InterProScan results (if enabled).
+InterProScan results for all ORFs in extracted contigs (requires InterProScan to be enabled).
 
 #### Top Domains Chart
 
-Horizontal bar chart of the most frequently detected protein domains.
+Horizontal bar chart of the most frequently detected protein domains across all contigs.
 
 #### Analysis Types Pie Chart
 
-Breakdown of annotations by database source (Pfam, CDD, SMART, etc.).
+Breakdown of annotations by database source (Pfam, CDD, TIGRFAM, SMART, Gene3D, SUPERFAMILY, PANTHER, ProSiteProfiles, Hamap, etc.).
+
+#### Binomial Domain Enrichment (All Domains)
+
+Bar chart of all statistically enriched Pfam domains from the binomial analysis, sorted by adjusted p-value. Complements the Co-transcription tab view, which focuses on domains found specifically in co-transcribed genes.
 
 #### InterProScan Results Table
 
 Full annotation table with:
 - Protein accession
 - Analysis database
-- Signature accession/description
+- Signature accession and description
 - Domain coordinates
 - InterPro accession
 - GO annotations
 
 ### 7. DefenseFinder Tab
 
-Defense system detection results (if enabled).
+Defense system detection results (requires DefenseFinder to be enabled).
 
 #### Defense System Types
 
-Bar chart of detected defense system categories (e.g., RM, Abi, CRISPR-Cas).
+Bar chart of detected defense system categories (RM, Abi, CRISPR-Cas, TA, BREX, DISARM, etc.).
 
 #### Defense Systems by Subtype
 
@@ -279,32 +305,42 @@ Detailed breakdown by system subtype.
 Full details of detected systems:
 - System ID
 - Type and subtype
-- Position range
-- Proteins involved
+- Position range on contig
 - Gene count
 
 #### Defense Genes Table
 
-Individual genes contributing to defense systems.
+Individual genes contributing to each defense system, with gene name, system type and subtype, and contig location.
 
 #### Defense System Locus Viewer
 
-A specialized locus viewer for contigs containing defense systems:
+A specialized locus viewer focused on contigs containing defense systems:
 
-1. **Select contig**: Choose from contigs with detected defense systems
-2. **View defense system info**: See system type and subtype details
-3. **Visualize locus**: Gene arrow diagram with defense genes highlighted
+1. **Filter by defense type**: Optionally restrict the contig list to a specific defense system type
+2. **Select a contig**: Choose from contigs that have at least one DefenseFinder defense system
+3. **View system info**: See the defense system type and subtype for the selected contig
+4. **Visualize the locus**: Gene arrow diagram with genes color-coded by annotation
 
-Defense system genes are color-coded by system type:
+**Color coding in the defense locus viewer:**
+
+| Color | Description |
+|-------|-------------|
+| **Dark teal-black** | Query hits (recombinases) — same color as in the main locus viewer |
+| **Navy blue gradient** | DefenseFinder defense genes, shaded by system type (see table below) |
+| **White** | Genes not part of a defense system |
+
+Defense system gene colors:
 | System Type | Color |
 |-------------|-------|
-| RM (Restriction-Modification) | Darkest teal |
-| CRISPR-Cas | Dark teal |
-| Abi (Abortive infection) | Slate teal |
-| TA (Toxin-Antitoxin) | Medium teal |
-| BREX | Medium-light teal |
-| DISARM | Light teal |
-| Other systems | Teal gradient |
+| RM (Restriction-Modification) | Darkest navy |
+| CRISPR-Cas | Dark navy |
+| Abi (Abortive infection) | Navy |
+| TA (Toxin-Antitoxin) | Darkest navy |
+| BREX | Medium navy |
+| DISARM | Navy-teal |
+| Other systems | Navy gradient |
+
+The query hit coloring in the defense locus viewer uses the same `QUERY_HIT_COLOR` as the main locus viewer, so it is easy to identify the recombinase in the context of each defense system.
 
 ## Interactive Features
 
@@ -348,7 +384,7 @@ To analyze a new sample:
 pixi run python -c "import shiny; print(shiny.__version__)"
 
 # Check for port conflicts
-lsof -i :8080
+lsof -i :8000
 ```
 
 ### No Data Displayed
@@ -362,6 +398,12 @@ lsof -i :8080
 - Check Plotly is installed: `pixi run python -c "import plotly"`
 - Try refreshing the browser
 - Check browser console for JavaScript errors
+
+### Missing Defense Score or Binomial Plots
+
+- Defense scores require DefenseFinder and co-transcription analysis to complete first
+- Binomial enrichment requires `binomial.enabled: true` in `config/config.yaml` and InterProScan to be enabled
+- Check that `defense_scores.tsv` and `BinomialAnalysis.csv` exist in the results directory
 
 ### Slow Performance
 
@@ -383,23 +425,18 @@ dashboard/
 
 ### Color Theme
 
-The dashboard uses a teal/slate color palette defined in `app.py`:
+The dashboard uses a teal/slate color palette defined in `app.py`. The locus viewer color constants are in `locus_viewer.py`:
 
 ```python
-TEAL_PALETTE = [
-    "#2d4a4a",  # Darkest teal
-    "#3d5a5a",  # Dark teal
-    "#4a6670",  # Slate blue-teal
-    "#5a7a7a",  # Medium teal
-    "#6b9090",  # Medium-light teal
-    "#7a9e9e",  # Light teal
-    "#8fb3b3",  # Lighter teal/sage
-    "#a8c4c4",  # Light sage
-    "#b5cece",  # Pale sage
-]
+QUERY_HIT_COLOR = "#2d3d3d"          # Dark teal-black for recombinases
+DOWNSTREAM_COLOR = "#5a8a7a"         # Green-teal for co-transcribed genes
+DEFENSE_COLOR = "#6a9eae"            # Light blue-teal for defense genes
+MGE_COLOR = "#4a5a6a"                # Dark slate-blue for MGEs
+INTERPROSCAN_OTHER_COLOR = "#b0b0b0" # Gray for other domain annotations
+NO_ANNOTATION_COLOR = "#ffffff"      # White for unannotated genes
 ```
 
-To modify colors, edit the `TEAL_PALETTE`, `CHART_COLORS`, and `CUSTOM_CSS` variables in `app.py`, and the color constants in `locus_viewer.py`.
+To modify colors, edit these constants in `locus_viewer.py` and the `TEAL_PALETTE` / `CUSTOM_CSS` variables in `app.py`.
 
 ### Add New Visualizations
 
@@ -418,10 +455,9 @@ def my_custom_plot():
     df = filtered_blast_data()
     if df is None:
         return ui.p("No data")
-    # Create your plot using the teal palette
     fig = px.scatter(df.to_pandas(), x="pident", y="evalue",
                      color_discrete_sequence=TEAL_PALETTE)
-    return ui.HTML(fig.to_html(include_plotlyjs="cdn", full_html=False))
+    return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 ```
 
 ### Customize Locus Viewer
@@ -429,10 +465,12 @@ def my_custom_plot():
 Edit `dashboard/utils/locus_viewer.py` to modify:
 - `DOMAIN_COLORS` - Colors for InterProScan domain annotations
 - `DEFENSE_SYSTEM_COLORS` - Colors for DefenseFinder system types
-- `QUERY_HIT_COLOR` - Color for recombinase query hits
+- `QUERY_HIT_COLOR` - Color for recombinase query hits (shared by both locus viewers)
 - `DOWNSTREAM_COLOR` - Color for co-transcribed genes
+- `MGE_COLOR` - Color for mobile genetic element genes
 - `create_gene_arrow()` - Gene arrow shape and styling
-- `create_locus_figure()` - Overall locus diagram layout
+- `create_locus_figure()` - Main locus diagram
+- `create_defense_locus_figure()` - Defense system locus diagram
 
 ### Modify Data Loading
 
@@ -442,6 +480,8 @@ Edit `dashboard/utils/data_loader.py` to add new data sources or modify parsing:
 - `load_hit_to_contig_mapping()` - Maps BLAST hits to contig ORFs
 - `load_defensefinder_systems()` - Defense system results
 - `load_interproscan_results()` - Domain annotations
+- `load_defense_scores()` - Defense scores for co-transcribed genes
+- `load_binomial_results()` - Binomial domain enrichment results
 
 ## Next Steps
 
