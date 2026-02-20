@@ -4,6 +4,7 @@ Loads and parses pipeline output files.
 """
 
 import json
+import re
 import polars as pl
 from pathlib import Path
 from typing import Optional
@@ -158,7 +159,13 @@ def load_contig_orfs(results_dir: str) -> Optional[pl.DataFrame]:
                         strand = int(parts[3].strip())
 
                         # Extract contig name from ORF ID
-                        contig = orf_id.rsplit("_", 1)[0] if "_" in orf_id else orf_id
+                        # Format: ContigAcc_start-stop:._N → ContigAcc_start-stop
+                        m = re.match(r"(.+?_\d+-\d+):\._\d+$", orf_id)
+                        if m:
+                            contig = m.group(1)
+                        else:
+                            m2 = re.match(r"(.+)_\d+$", orf_id)
+                            contig = m2.group(1) if m2 else orf_id
 
                         orfs.append({
                             "orf_id": orf_id,
