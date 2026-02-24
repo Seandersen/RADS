@@ -29,7 +29,7 @@ rule download_genomes:
             # Mode 2: Download by accession file using efetch
             echo "Downloading from accession file: {params.accession_file}" > {log}
 
-            total=$(wc -l < {params.accession_file})
+            total=$(wc -l < "{params.accession_file}")
             count=0
 
             while IFS= read -r acc || [ -n "$acc" ]; do
@@ -52,7 +52,7 @@ rule download_genomes:
 
                 # Rate limiting to avoid NCBI throttling
                 sleep 0.4
-            done < {params.accession_file}
+            done < "{params.accession_file}"
 
             echo "Download complete. Successfully downloaded $count sequences." >> {log}
 
