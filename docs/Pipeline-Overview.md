@@ -455,6 +455,8 @@ Use `--cores N` to control parallelism:
 pixi run snakemake --cores 16  # Use 16 cores
 ```
 
+For estimated runtimes by genome count, core count, and configuration, see the [[Advanced-Usage#runtime-estimates|Performance Tuning]] section of Advanced Usage.
+
 ## Next Steps
 
 - [[Dashboard-Guide]] - Explore results interactively

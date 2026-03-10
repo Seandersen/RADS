@@ -296,6 +296,20 @@ pixi run snakemake --report report.html
 
 ## Performance Tuning
 
+### Runtime Estimates
+
+The figure below shows estimated wall-clock times as a function of genome count, core count, and pipeline configuration. Estimates assume ~120 s/genome for per-genome steps (translate, BLAST, extract), ~100 contig ORFs/genome, a 30% BLAST hit rate, and ~4,000 proteins/genome for the binomial whole-genome InterProScan.
+
+![RADS Pipeline Performance Estimates](performance_estimate.png)
+
+Key takeaways:
+- **InterProScan dominates runtime** at scale — using Pfam-only (`applications: "Pfam"`) instead of multiple databases can reduce IPS time by 5–10×.
+- **Binomial analysis adds substantial cost** because it runs InterProScan on whole-genome proteomes of all genomes with BLAST hits. Provide a precomputed `whole_genome_interproscan` TSV to skip this step.
+- **Core scaling has diminishing returns** above ~16–32 cores because InterProScan and DefenseFinder are largely sequential.
+- **Limiting genomes** with `max_genomes` is the fastest way to reduce runtime for exploratory runs.
+
+The generation script is at `docs/generate_performance_estimate.py` and can be re-run to update the figure if timing assumptions change.
+
 ### Resource Allocation
 
 Add resources to rules:

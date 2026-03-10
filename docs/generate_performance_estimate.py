@@ -99,14 +99,37 @@ def phase_breakdown(n_genomes, cores, ips_4apps=False, binomial=False):
 # ---------------------------------------------------------------------------
 genome_range = np.array([50, 100, 250, 500, 1000, 2500, 5000, 10000])
 core_counts  = [4, 8, 16, 32, 64]
-core_colors  = ["#d62728", "#ff7f0e", "#2ca02c", "#1f77b4", "#9467bd"]
+
+# Palette derived from the RADS reference figure:
+#   #1e3d38  very dark teal  (TIR)
+#   #2d5a52  dark teal
+#   #4a7d74  medium teal     (CBASS)
+#   #6b9e96  medium-light teal (cGAS / PyCSAR)
+#   #6e8fa5  muted blue-grey (STING / Class III Cyclase)
+#   #95b0bc  light muted blue
+#   #4a5c65  dark slate      (virus particles)
+#   #edf0f2  very light grey (background)
+BG       = "#edf0f2"
+DARK1    = "#1e3d38"
+DARK2    = "#2d5a52"
+MID_TEAL = "#4a7d74"
+LT_TEAL  = "#6b9e96"
+BLUE_GRY = "#6e8fa5"
+LT_BLUE  = "#95b0bc"
+SLATE    = "#4a5c65"
+PALE     = "#adc4ce"
+
+core_colors = [LT_BLUE, BLUE_GRY, LT_TEAL, MID_TEAL, DARK1]
 
 fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-fig.patch.set_facecolor("#f8f9fa")
+fig.patch.set_facecolor(BG)
 for ax in axes:
-    ax.set_facecolor("#f8f9fa")
+    ax.set_facecolor(BG)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#aaaaaa")
+    ax.spines["bottom"].set_color("#aaaaaa")
+    ax.tick_params(colors="#3a3a3a")
 
 # ---------------------------------------------------------------------------
 # Panel 1 — Scaling with core count (Standard: Pfam only, no binomial)
@@ -123,7 +146,7 @@ for cores, color in zip(core_counts, core_colors):
 # Shade the 20-core reference used in the paper
 times_20 = [estimate_hours(g, 20, ips_4apps=False, binomial=False)
             for g in genome_range]
-ax1.plot(genome_range, times_20, "s--", color="#555555", linewidth=1.5,
+ax1.plot(genome_range, times_20, "s--", color=SLATE, linewidth=1.5,
          markersize=4, label="20 cores (config default)", zorder=5)
 
 ax1.set_xscale("log")
@@ -141,11 +164,11 @@ ax2 = axes[1]
 ax2.set_title("Configuration Comparison\n(20 cores)", fontsize=12, fontweight="bold")
 
 configs = [
-    ("Minimal\n(no IPS, no binomial)",     False, False, "#aec7e8", "-"),
-    ("Standard\n(Pfam only)",              False, False, "#1f77b4", "-"),
-    ("Standard + Binomial\n(Pfam only)",   False, True,  "#1f77b4", "--"),
-    ("Full IPS\n(4 apps, no binomial)",    True,  False, "#d62728", "-"),
-    ("Full IPS + Binomial\n(4 apps)",      True,  True,  "#d62728", "--"),
+    ("Minimal\n(no IPS, no binomial)",     False, False, PALE,     "-"),
+    ("Standard\n(Pfam only)",              False, False, BLUE_GRY, "-"),
+    ("Standard + Binomial\n(Pfam only)",   False, True,  BLUE_GRY, "--"),
+    ("Full IPS\n(4 apps, no binomial)",    True,  False, MID_TEAL, "-"),
+    ("Full IPS + Binomial\n(4 apps)",      True,  True,  DARK1,    "--"),
 ]
 
 for label, ips4, binom, color, ls in configs:
@@ -183,10 +206,10 @@ bar_configs = [
 ]
 
 phase_colors = {
-    "Per-genome\n(translate, BLAST, extract)": "#4e79a7",
-    "DefenseFinder":                            "#76b7b2",
-    "InterProScan\n(contigs only)":             "#f28e2b",
-    "Binomial\n(whole-genome IPS)":             "#e15759",
+    "Per-genome\n(translate, BLAST, extract)": BLUE_GRY,
+    "DefenseFinder":                            LT_TEAL,
+    "InterProScan\n(contigs only)":             MID_TEAL,
+    "Binomial\n(whole-genome IPS)":             DARK1,
 }
 
 n_bars = len(bar_configs)
@@ -226,7 +249,7 @@ fig.text(
     "30% BLAST hit rate, 4,000 proteins/genome for binomial IPS.\n"
     "InterProScan thread scaling is sub-linear; actual times vary with cluster speed, "
     "genome size, and hit rate. Use as order-of-magnitude guide only.",
-    ha="center", fontsize=8, color="#555555", style="italic"
+    ha="center", fontsize=8, color=SLATE, style="italic"
 )
 
 fig.suptitle("RADS Pipeline — Estimated Runtime by Configuration",
