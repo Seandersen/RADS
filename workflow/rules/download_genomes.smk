@@ -15,6 +15,7 @@ rule download_genomes:
         source = config["download"].get("source", "refseq"),
         assembly_level = config["download"].get("assembly_level", "complete"),
         max_genomes = config["download"].get("max_genomes", 0),
+        random_sample = config["download"].get("random_sample", False),
         accession_file = config["download"].get("accession_file", ""),
         outdir = f"results/{SAMPLE}/downloaded_genomes"
     log:
@@ -65,9 +66,16 @@ rule download_genomes:
                     --assembly-level {params.assembly_level} \
                     --as-json-lines > {params.outdir}/all_records.jsonl 2>> {log} || true
 
-                # Extract first N accessions
-                head -n {params.max_genomes} {params.outdir}/all_records.jsonl | \
-                    jq -r '.accession' > {params.outdir}/accessions.txt
+                # Extract N accessions (random or first N)
+                if [ "{params.random_sample}" = "True" ] || [ "{params.random_sample}" = "true" ]; then
+                    shuf -n {params.max_genomes} {params.outdir}/all_records.jsonl | \
+                        jq -r '.accession' > {params.outdir}/accessions.txt
+                    echo "Random sample of {params.max_genomes} genomes selected" >> {log}
+                else
+                    head -n {params.max_genomes} {params.outdir}/all_records.jsonl | \
+                        jq -r '.accession' > {params.outdir}/accessions.txt
+                    echo "First {params.max_genomes} genomes selected" >> {log}
+                fi
 
                 rm -f {params.outdir}/all_records.jsonl
 

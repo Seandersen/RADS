@@ -12,7 +12,8 @@ download:
   taxon: "Bacillota"                 # NCBI taxon query
   source: "refseq"                   # refseq or genbank
   assembly_level: "complete"         # complete, chromosome, scaffold, contig
-  max_genomes: 0                     # Limit number of genomes
+  max_genomes: 0                     # Limit number of genomes (0 = no limit)
+  random_sample: false               # If true, randomly sample max_genomes instead of taking the first N
 
 # Local genomes path (used when download.enabled = false)
 # Should point to directory containing genome directories with .fna files
