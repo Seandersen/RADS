@@ -14,9 +14,10 @@ rule blast_search:
         hits = f"results/{SAMPLE}/blast_results/{{genome}}_blast.txt"
     params:
         identity = config["diamond"]["identity"],
-        threads = config["diamond"]["threads"],
         max_target_seqs = config["diamond"]["max_target_seqs"],
         block_size = config["diamond"].get("block_size", 0)
+    threads:
+        config["diamond"]["threads"]
     log:
         f"logs/{SAMPLE}/blast/{{genome}}.log"
     benchmark:
@@ -42,7 +43,7 @@ rule blast_search:
             diamond blastp \
                 -d {input.db} \
                 --query {input.query} \
-                --threads {params.threads} \
+                --threads {threads} \
                 --out {output.hits} \
                 --outfmt 6 qseqid sseqid length nident pident evalue \
                 $MAX_TARGETS_OPT \

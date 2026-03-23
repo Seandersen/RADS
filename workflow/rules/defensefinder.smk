@@ -19,8 +19,9 @@ rule run_defensefinder:
         outdir = f"results/{SAMPLE}/defensefinder",
         enabled = config.get("defensefinder", {}).get("enabled", True),
         db_type = config.get("defensefinder", {}).get("db_type", "unordered"),
-        coverage = config.get("defensefinder", {}).get("coverage", 0.4),
-        workers = config.get("defensefinder", {}).get("workers", 4)
+        coverage = config.get("defensefinder", {}).get("coverage", 0.4)
+    threads:
+        config.get("defensefinder", {}).get("workers", 4)
     log:
         f"logs/{SAMPLE}/defensefinder.log"
     shell:
@@ -71,7 +72,7 @@ rule run_defensefinder:
         # The pixi defensefinder environment has compatible versions of defense-finder and models
         if pixi run -e defensefinder defense-finder run \
             --db-type {params.db_type} \
-            --workers {params.workers} \
+            --workers {threads} \
             -o {params.outdir} \
             {input.proteins} \
             2>&1 | tee {log}; then

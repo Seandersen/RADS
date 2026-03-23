@@ -44,6 +44,7 @@ interproscan:
   # Options: Pfam, TIGRFAM, SMART, CDD, SUPERFAMILY, Gene3D, Coils, ProSiteProfiles
   # Avoid: MobiDBLite, Panther (often have binary/dependency issues)
   applications: "Pfam"
+  threads: 8
 
 # Co-transcription analysis
 cotranscription:

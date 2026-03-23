@@ -65,6 +65,8 @@ rule run_interproscan:
         # Specify which analyses to run (default: Pfam only for reliability)
         # Other options: CDD, TIGRFAM, SMART, SUPERFAMILY, Gene3D
         applications = config.get("interproscan", {}).get("applications", "Pfam")
+    threads:
+        config.get("interproscan", {}).get("threads", 8)
     log:
         f"logs/{SAMPLE}/interproscan.log"
     conda:
@@ -81,6 +83,7 @@ rule run_interproscan:
                     -f tsv \
                     -o {output.results} \
                     -appl {params.applications} \
+                    -cpu {threads} \
                     2>&1 | tee {log}
             else
                 touch {output.results}
