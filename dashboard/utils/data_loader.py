@@ -225,6 +225,140 @@ def get_summary_stats(results_dir: str) -> dict:
     return stats
 
 
+# ---------------------------------------------------------------------------
+# Antiphage system category mapping
+# ---------------------------------------------------------------------------
+# Maps DefenseFinder system type/subtype names to broad antiphage categories.
+# Covers the full DefenseFinder catalog as of models v1.3+.
+# ---------------------------------------------------------------------------
+
+# Exact match on the `type` field (second-to-last component of model_fqn)
+_CATEGORY_BY_TYPE: dict[str, str] = {
+    # CRISPR-Cas
+    "Cas": "CRISPR-Cas",
+    "CRISPR-Cas": "CRISPR-Cas",
+
+    # CBASS (cyclic-nucleotide second-messenger signaling)
+    "CBASS": "CBASS",
+    "Thoeris": "CBASS",
+    "Pycsar": "CBASS",
+
+    # Nucleic acid restriction (R-M and related)
+    "RM": "Nucleic acid restriction",
+    "BREX": "Nucleic acid restriction",
+    "DISARM": "Nucleic acid restriction",
+    "Dnd": "Nucleic acid restriction",
+    "Dpd": "Nucleic acid restriction",
+    "SspBCDE": "Nucleic acid restriction",
+    "Wadjet": "Nucleic acid restriction",
+    "Zorya": "Nucleic acid restriction",
+    "Shedu": "Nucleic acid restriction",
+    "NixI": "Nucleic acid restriction",
+    "Nhi": "Nucleic acid restriction",
+    "pAgo": "Nucleic acid restriction",
+    "RADAR": "Nucleic acid restriction",
+    "Radar": "Nucleic acid restriction",
+    "FS_GIY_YIG": "Nucleic acid restriction",
+    "FS_HEPN_TM": "Nucleic acid restriction",
+    "FS_HP": "Nucleic acid restriction",
+    "FS_HsdR_like": "Nucleic acid restriction",
+    "FS_Sma": "Nucleic acid restriction",
+
+    # Retrons
+    "Retron": "Retrons",
+
+    # tRNA degradation
+    "PrrC": "tRNA degradation",
+    "RloC": "tRNA degradation",
+    "CapRel": "tRNA degradation",
+
+    # Toxin-antitoxin
+    "DRT": "Toxin-antitoxin",
+    "MazEF": "Toxin-antitoxin",
+    "RexAB": "Toxin-antitoxin",
+    "RnlAB": "Toxin-antitoxin",
+    "RosmerTA": "Toxin-antitoxin",
+    "ShosTA": "Toxin-antitoxin",
+    "PfiAT": "Toxin-antitoxin",
+    "PsyrTA": "Toxin-antitoxin",
+    "SoFIC": "Toxin-antitoxin",
+    "MqsRAC": "Toxin-antitoxin",
+
+    # Abortive infection
+    "Abi": "Abortive infection",
+    "Gabija": "Abortive infection",
+    "Druantia": "Abortive infection",
+    "Hachiman": "Abortive infection",
+    "Lamassu-Fam": "Abortive infection",
+    "Lamassu": "Abortive infection",
+    "PARIS": "Abortive infection",
+    "Paris": "Abortive infection",
+    "Avs": "Abortive infection",
+    "BstA": "Abortive infection",
+    "Kiwa": "Abortive infection",
+    "Lit": "Abortive infection",
+    "Shango": "Abortive infection",
+    "JukAB": "Abortive infection",
+    "Septu": "Abortive infection",
+    "SEFIR": "Abortive infection",
+    "GasderMIN": "Abortive infection",
+    "SpbK": "Abortive infection",
+    "Stk2": "Abortive infection",
+    "Pif": "Abortive infection",
+    "DdmDE": "Abortive infection",
+    "Dsr": "Abortive infection",
+    "Viperin": "Abortive infection",
+    "Borvo": "Abortive infection",
+    "DarTG": "Abortive infection",
+    "Detocs": "Abortive infection",
+
+    # Unknown mechanism
+    "Menshen": "Unknown mechanism",
+    "Mokosh": "Unknown mechanism",
+    "Aditi": "Unknown mechanism",
+    "Dazbog": "Unknown mechanism",
+    "Tiamat": "Unknown mechanism",
+    "Dodola": "Unknown mechanism",
+    "Eleos": "Unknown mechanism",
+    "NLR": "Unknown mechanism",
+    "Azaca": "Unknown mechanism",
+    "Bunzi": "Unknown mechanism",
+    "Uzume": "Unknown mechanism",
+    "ISG15-like": "Unknown mechanism",
+    "MADS": "Unknown mechanism",
+    "Rst_TIR-NLR": "Unknown mechanism",
+}
+
+# Prefix-based matching (applied when exact match fails)
+_CATEGORY_BY_PREFIX: list[tuple[str, str]] = [
+    ("Cas_Type_",    "CRISPR-Cas"),
+    ("CBASS_Type_",  "CBASS"),
+    ("RM_Type_",     "Nucleic acid restriction"),
+    ("Retron_",      "Retrons"),
+    ("Abi",          "Abortive infection"),
+    ("Gao_",         "Unknown mechanism"),
+    ("PD-Lambda-",   "Unknown mechanism"),
+    ("PD-T7-",       "Unknown mechanism"),
+    ("PD-T4-",       "Abortive infection"),
+    ("FS_",          "Nucleic acid restriction"),
+]
+
+
+def get_antiphage_category(system_type: str, subtype: str = "") -> str:
+    """Map a DefenseFinder system type/subtype to an antiphage mechanism category."""
+    for field in (system_type, subtype):
+        if not field or field == "Unknown":
+            continue
+        # Exact match
+        if field in _CATEGORY_BY_TYPE:
+            return _CATEGORY_BY_TYPE[field]
+        # Prefix match
+        for prefix, category in _CATEGORY_BY_PREFIX:
+            if field.startswith(prefix):
+                return category
+    return "Unknown mechanism"
+
+
 def load_defensefinder_systems(results_dir: str) -> Optional[pl.DataFrame]:
     """
     Load DefenseFinder defense systems results.
@@ -293,6 +427,7 @@ def load_defensefinder_systems(results_dir: str) -> Optional[pl.DataFrame]:
                         "sys_id": parts[5] if len(parts) > 5 else "",
                         "type": system_type,
                         "subtype": subtype,
+                        "antiphage_category": get_antiphage_category(system_type, subtype),
                         "hit_status": parts[8] if len(parts) > 8 else "",
                         "hit_score": parts[11] if len(parts) > 11 else "",
                     })

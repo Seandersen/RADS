@@ -522,6 +522,48 @@ app_ui = ui.page_sidebar(
         ),
         ui.nav_panel(
             "DefenseFinder",
+            # Row 1 — category overview
+            ui.layout_columns(
+                ui.card(
+                    ui.card_header("Defense Systems by Antiphage Category"),
+                    ui.output_ui("defense_category_plot"),
+                    full_screen=True,
+                ),
+                ui.card(
+                    ui.card_header("Category × System Type Breakdown"),
+                    ui.output_ui("defense_category_sunburst"),
+                    full_screen=True,
+                ),
+                col_widths=[6, 6],
+            ),
+            # Row 2 — per-category drilldown
+            ui.card(
+                ui.card_header("Individual Systems by Category"),
+                ui.layout_sidebar(
+                    ui.sidebar(
+                        ui.input_select(
+                            "defense_category_select",
+                            "Select Category:",
+                            choices=[
+                                "All",
+                                "Abortive infection",
+                                "CBASS",
+                                "Nucleic acid restriction",
+                                "CRISPR-Cas",
+                                "Toxin-antitoxin",
+                                "Retrons",
+                                "tRNA degradation",
+                                "Unknown mechanism",
+                            ],
+                            selected="All",
+                        ),
+                        width=240,
+                    ),
+                    ui.output_ui("defense_category_drilldown"),
+                ),
+                full_screen=True,
+            ),
+            # Row 3 — original type / subtype charts
             ui.layout_columns(
                 ui.card(
                     ui.card_header("Defense System Types"),
@@ -529,7 +571,7 @@ app_ui = ui.page_sidebar(
                     full_screen=True,
                 ),
                 ui.card(
-                    ui.card_header("Defense Systems by Subtype"),
+                    ui.card_header("Defense Systems by Subtype (Top 15)"),
                     ui.output_ui("defense_subtype_plot"),
                     full_screen=True,
                 ),
@@ -1342,7 +1384,163 @@ def server(input, output, session):
 
         return render.DataTable(result.to_pandas(), filters=True, height="400px")
 
-    # DefenseFinder tab outputs
+    # DefenseFinder tab outputs — category charts
+
+    # Colour palette for the 8 fixed antiphage categories
+    CATEGORY_COLORS = {
+        "Abortive infection":       "#2d4a4a",
+        "CBASS":                    "#3d6b6b",
+        "Nucleic acid restriction": "#4a7d74",
+        "CRISPR-Cas":               "#5a9090",
+        "Toxin-antitoxin":          "#6b9e96",
+        "Retrons":                  "#7aaeae",
+        "tRNA degradation":         "#8fb3b3",
+        "Unknown mechanism":        "#a8c4c4",
+    }
+    CATEGORY_ORDER = list(CATEGORY_COLORS.keys())
+
+    @render.ui
+    def defense_category_plot():
+        df = defensefinder_systems()
+        if df is None or len(df) == 0:
+            return ui.p("No defense systems found. Run pipeline with DefenseFinder enabled.")
+        if "antiphage_category" not in df.columns:
+            return ui.p("Category data unavailable.")
+
+        # Deduplicate on sys_id so each system counts once
+        if "sys_id" in df.columns:
+            deduped = df.unique(subset=["sys_id"])
+        else:
+            deduped = df
+
+        counts = (
+            deduped.group_by("antiphage_category")
+            .len()
+            .sort("len", descending=True)
+        )
+
+        pdf = counts.to_pandas()
+        pdf["color"] = pdf["antiphage_category"].map(
+            lambda c: CATEGORY_COLORS.get(c, "#a8c4c4")
+        )
+
+        fig = go.Figure(go.Bar(
+            x=pdf["antiphage_category"],
+            y=pdf["len"],
+            marker_color=pdf["color"],
+            hovertemplate="<b>%{x}</b><br>Systems: %{y}<extra></extra>",
+        ))
+        fig.update_layout(
+            xaxis_title="Antiphage Category",
+            yaxis_title="Number of Defense Systems",
+            xaxis_tickangle=-30,
+            height=420,
+            margin=dict(b=120),
+            plot_bgcolor=CHART_COLORS["background"],
+            showlegend=False,
+        )
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
+
+    @render.ui
+    def defense_category_sunburst():
+        df = defensefinder_systems()
+        if df is None or len(df) == 0:
+            return ui.p("No defense systems found.")
+        if "antiphage_category" not in df.columns or "type" not in df.columns:
+            return ui.p("Category data unavailable.")
+
+        # Deduplicate on sys_id
+        if "sys_id" in df.columns:
+            deduped = df.unique(subset=["sys_id"])
+        else:
+            deduped = df
+
+        counts = (
+            deduped.group_by(["antiphage_category", "type"])
+            .len()
+            .sort("len", descending=True)
+        )
+
+        pdf = counts.to_pandas()
+        fig = px.sunburst(
+            pdf,
+            path=["antiphage_category", "type"],
+            values="len",
+            color="antiphage_category",
+            color_discrete_map=CATEGORY_COLORS,
+            hover_data={"len": True},
+        )
+        fig.update_traces(
+            hovertemplate="<b>%{label}</b><br>Count: %{value}<extra></extra>",
+            insidetextorientation="radial",
+        )
+        fig.update_layout(
+            height=420,
+            margin=dict(t=10, b=10, l=10, r=10),
+        )
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
+
+    @render.ui
+    def defense_category_drilldown():
+        df = defensefinder_systems()
+        if df is None or len(df) == 0:
+            return ui.p("No defense systems found.")
+        if "antiphage_category" not in df.columns:
+            return ui.p("Category data unavailable.")
+
+        # Deduplicate on sys_id
+        if "sys_id" in df.columns:
+            deduped = df.unique(subset=["sys_id"])
+        else:
+            deduped = df
+
+        selected = input.defense_category_select()
+        if selected != "All":
+            deduped = deduped.filter(pl.col("antiphage_category") == selected)
+
+        if len(deduped) == 0:
+            return ui.p(f"No systems found for category: {selected}")
+
+        # Group by type (system family)
+        counts = (
+            deduped.group_by("type")
+            .len()
+            .sort("len", descending=True)
+        )
+
+        pdf = counts.to_pandas()
+
+        # Pick a single colour for the selected category, cycle through palette otherwise
+        if selected != "All":
+            bar_color = CATEGORY_COLORS.get(selected, CHART_COLORS["secondary"])
+            colors = [bar_color] * len(pdf)
+        else:
+            colors = [
+                CATEGORY_COLORS.get(
+                    deduped.filter(pl.col("type") == t)["antiphage_category"][0]
+                    if len(deduped.filter(pl.col("type") == t)) > 0 else "",
+                    CHART_COLORS["secondary"]
+                )
+                for t in pdf["type"]
+            ]
+
+        fig = go.Figure(go.Bar(
+            y=pdf["type"],
+            x=pdf["len"],
+            orientation="h",
+            marker_color=colors,
+            hovertemplate="<b>%{y}</b><br>Systems: %{x}<extra></extra>",
+        ))
+        fig.update_layout(
+            xaxis_title="Number of Defense Systems",
+            yaxis_title="System Type",
+            yaxis={"categoryorder": "total ascending"},
+            height=max(350, len(pdf) * 24),
+            margin=dict(l=160, r=20, t=20, b=40),
+            plot_bgcolor=CHART_COLORS["background"],
+        )
+        return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
+
     @render.ui
     def defense_system_type_plot():
         df = defensefinder_systems()
