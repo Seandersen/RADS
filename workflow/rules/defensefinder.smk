@@ -30,9 +30,11 @@ rule run_defensefinder:
         mkdir -p {params.outdir}
 
         # Function to create empty output files with headers
+        # Headers must match real macsyfinder output format so the data_loader
+        # correctly recognizes and skips them, enabling fallback to metrics JSON.
         create_empty_outputs() {{
-            echo -e "sys_id\\ttype\\tsubtype\\tsys_beg\\tsys_end\\tprotein_in_syst\\tgenes_count\\tname_of_profiles_in_sys" > {output.systems}
-            echo -e "hit_id\\treplicon\\tposition\\thit_pos\\tgene_name\\ti_eval\\tscore\\tprofile_cov\\tseq_cov\\tbegin_match\\tend_match\\tprotein_in_syst\\ttype\\tsubtype" > {output.genes}
+            echo -e "replicon\\thit_id\\tgene_name\\thit_pos\\tmodel_fqn\\tsys_id\\tsys_wholeness\\thit_gene_ref\\thit_status\\thit_seq_len\\thit_i_eval\\thit_score\\thit_profile_cov\\thit_seq_cov\\thit_begin_match\\thit_end_match\\tused_in" > {output.systems}
+            echo -e "replicon\\thit_id\\tgene_name\\thit_pos\\tmodel_fqn\\tsys_id\\tsys_wholeness\\thit_gene_ref\\thit_status\\thit_seq_len\\thit_i_eval\\thit_score\\thit_profile_cov\\thit_seq_cov\\thit_begin_match\\thit_end_match\\tused_in" > {output.genes}
             echo -e "hit_id\\treplicon\\tposition\\thit_pos\\tgene_name\\ti_eval\\tscore\\tprofile_cov\\tseq_cov\\tbegin_match\\tend_match" > {output.hmmer}
         }}
 
