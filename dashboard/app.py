@@ -950,16 +950,21 @@ def server(input, output, session):
         if df is None or len(df) == 0:
             return ui.p("No data available")
 
+        pdf = df.to_pandas()
         fig = px.scatter(
-            df.to_pandas(),
+            pdf,
             x="length",
             y="pident",
-            color="genome",
-            hover_data=["query_id", "subject_id", "evalue"],
-            labels={"length": "Alignment Length", "pident": "% Identity"},
-            color_discrete_sequence=TEAL_PALETTE,
+            color="evalue",
+            color_continuous_scale="teal",
+            hover_data=["query_id", "subject_id", "genome", "evalue"],
+            labels={"length": "Alignment Length", "pident": "% Identity", "evalue": "E-value"},
         )
-        fig.update_layout(height=400, plot_bgcolor=CHART_COLORS["background"])
+        fig.update_layout(
+            height=400,
+            plot_bgcolor=CHART_COLORS["background"],
+            showlegend=False,
+        )
         return ui.HTML(fig.to_html(include_plotlyjs=False, full_html=False))
 
     @render.ui
