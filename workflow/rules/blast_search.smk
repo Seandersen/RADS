@@ -26,8 +26,8 @@ rule blast_search:
         "../envs/diamond.yaml"
     shell:
         """
-        # Check if database is valid (not empty marker file)
-        if [ -s {input.db} ] && file {input.db} | grep -q "data"; then
+        # Check if database is valid (not empty marker file from touch)
+        if [ -s {input.db} ]; then
             # Build max_target_seqs option only if > 0
             MAX_TARGETS_OPT=""
             if [ {params.max_target_seqs} -gt 0 ]; then
