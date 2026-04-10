@@ -1,0 +1,177 @@
+# RADS SLURM Profile
+# ==================
+# Snakemake 8.x native SLURM executor
+# Requires: snakemake-executor-plugin-slurm (included in pixi dependencies)
+#
+# Usage:
+#   pixi run slurm
+#
+# Cluster customization:
+#   If your cluster requires a specific partition or account, add them to
+#   default-resources below, e.g.:
+#     - slurm_partition=your_partition
+#     - slurm_account=your_account
+#
+# Pixi on compute nodes:
+#   Jobs inherit the full login-node environment via --export=ALL (see
+#   slurm_extra below). This ensures pixi is on PATH so that the
+#   defensefinder rule can call `pixi run -e defensefinder`.
+#   If your cluster strips environment variables, either:
+#     a) Add pixi to the system module path and load it in slurm_extra, or
+#     b) Replace --export=ALL with an explicit PATH that includes pixi.
+
+# Max simultaneous cluster jobs
+jobs: 100
+
+# Snakemake 8 native SLURM executor (snakemake-executor-plugin-slurm)
+executor: slurm
+
+# Threads reserved on the login node for Snakemake orchestration only
+local-cores: 1
+
+# Seconds to wait for output files to appear on shared filesystem
+# Increase to 120 if your cluster has slow NFS/Lustre
+latency-wait: 60
+
+# Print shell commands in job logs for easier debugging
+printshellcmds: true
+
+# Retry each failed job once to handle transient cluster failures
+retries: 1
+
+# ---------------------------------------------------------------------------
+# Default resources applied to every rule unless overridden below.
+# runtime is in minutes; mem_mb is in megabytes.
+# ---------------------------------------------------------------------------
+default-resources:
+  - mem_mb=4000
+  - runtime=60
+  # Pass the full login-node environment (including pixi PATH) to each job
+  - slurm_extra="--export=ALL"
+
+# ---------------------------------------------------------------------------
+# Per-rule thread overrides.
+# The SLURM executor uses {threads} to set --cpus-per-task for each job.
+# Rules not listed here default to 1 thread (appropriate for single-threaded
+# tools: most shell/Python aggregation steps, seqkit, awk, sed).
+#
+# Note: build_database uses params.threads (not the threads: directive) so
+# --cpus-per-task will be 1 for that rule even though Diamond can multithread.
+# To fix this, the rule itself would need a threads: directive added.
+# ---------------------------------------------------------------------------
+set-threads:
+  # Multi-threaded compute rules
+  blast_search: 8               # Diamond BLASTP (--threads)
+  run_interproscan: 8           # InterProScan (-cpu); bump up if node allows
+  run_interproscan_chunk: 8         # InterProScan per chunk (scatter jobs)
+  run_defensefinder: 8          # DefenseFinder HMMER workers (overrides config's 4)
+
+  # Prodigal is single-threaded — explicit 1 to match --cpus-per-task to reality
+  translate_genome: 1
+  translate_contigs: 1
+  translate_genomes_for_binomial: 1
+
+  # Python/shell aggregation and I/O rules — single-threaded
+  download_genomes: 1
+  stage_genomes: 1
+  discover_genomes: 1
+  aggregate_blast_results: 1
+  extract_orf_ids: 1
+  extract_coordinates: 1
+  create_bed_file: 1
+  extract_contig_sequences: 1
+  concatenate_contigs: 1
+  prepare_interproscan_input: 1
+  map_blast_hits_to_contig_orfs: 1
+  identify_downstream_orfs: 1
+  extract_cotranscribed_sequences: 1
+  calculate_genome_sizes: 1
+  calculate_metrics: 1
+  calculate_defense_scores: 1
+  extract_genomes_with_hits: 1
+  clean_proteins_for_binomial: 1
+  split_proteins_for_binomial: 1
+  aggregate_interproscan_chunks: 1
+  run_binomial_analysis: 1
+
+# ---------------------------------------------------------------------------
+# Per-rule resource overrides.
+# Only rules with non-default requirements are listed here.
+# runtime is in minutes; mem_mb is in megabytes.
+# ---------------------------------------------------------------------------
+set-resources:
+
+  # --- Download (network I/O, no compute; extra time for large taxa) ---
+  download_genomes:
+    mem_mb: 4000
+    runtime: 120
+
+  # --- Prodigal on full contigs (single-threaded; larger input than per-genome) ---
+  translate_contigs:
+    mem_mb: 8000
+    runtime: 60
+
+  # --- Prodigal on combined genomes for binomial analysis ---
+  translate_genomes_for_binomial:
+    mem_mb: 8000
+    runtime: 60
+
+  # --- Diamond makedb (single SLURM CPU; see note in set-threads) ---
+  build_database:
+    mem_mb: 8000
+    runtime: 30
+
+  # --- Diamond BLASTP per genome (8 CPUs; parallelized across all genomes) ---
+  blast_search:
+    mem_mb: 16000
+    runtime: 120
+
+  # --- Aggregate BLAST results (Python; scales with number of genomes) ---
+  aggregate_blast_results:
+    mem_mb: 8000
+    runtime: 30
+
+  # --- Coordinate-based hit mapping (loads all translated files into memory) ---
+  map_blast_hits_to_contig_orfs:
+    mem_mb: 8000
+    runtime: 30
+
+  # --- Extract genomes with hits (Polars DataFrame; scales with genome set) ---
+  extract_genomes_with_hits:
+    mem_mb: 8000
+    runtime: 30
+
+  # --- DefenseFinder (HMMER; 8 workers on SLURM) ---
+  run_defensefinder:
+    mem_mb: 16000
+    runtime: 120
+
+  # --- InterProScan on contig ORFs (Java + Pfam DB; 8 CPUs) ---
+  # Increase mem_mb further if running multiple applications beyond Pfam
+  run_interproscan:
+    mem_mb: 32000
+    runtime: 480
+
+  # --- Split whole-genome proteins into chunks (seqkit, fast I/O) ---
+  split_proteins_for_binomial:
+    mem_mb: 4000
+    runtime: 30
+
+  # --- InterProScan per chunk (scatter; one SLURM job per ~50k-protein chunk) ---
+  # 50k proteins per chunk balances job count vs. runtime.
+  # InterProScan still needs the full Pfam database in memory (~8 GB),
+  # so 32 GB provides safe headroom for Java + database + work buffers.
+  # Runtime of 480 min covers large chunks; reduce if your chunks finish faster.
+  run_interproscan_chunk:
+    mem_mb: 32000
+    runtime: 480
+
+  # --- Gather: concatenate all chunk TSVs (Python file I/O) ---
+  aggregate_interproscan_chunks:
+    mem_mb: 4000
+    runtime: 30
+
+  # --- Binomial enrichment analysis (Polars + scipy statistics) ---
+  run_binomial_analysis:
+    mem_mb: 8000
+    runtime: 60

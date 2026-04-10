@@ -8,6 +8,7 @@ platforms = ["osx-arm64", "osx-64", "linux-64"]
 [dependencies]
 python = ">=3.11,<3.13"
 snakemake = ">=8.0"
+snakemake-executor-plugin-slurm = ">=0.4"
 ncbi-datasets-cli = ">=16.0"
 entrez-direct = ">=22.0"
 diamond = ">=2.1"
@@ -45,3 +46,4 @@ dag = "snakemake --dag | dot -Tsvg > dag.svg"
 test = "snakemake --cores 4 --configfile config/test.yaml --use-conda"
 dashboard = "shiny run dashboard/app.py --reload"
 clean = "rm -rf results/* logs/*"
+slurm = "mkdir -p logs/slurm && snakemake --profile profiles/slurm"

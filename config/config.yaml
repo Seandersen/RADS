@@ -63,3 +63,4 @@ defensefinder:
 binomial:
   enabled: true
   whole_genome_interproscan: ""  # Path to pre-computed file, or empty to run via pipeline
+  interproscan_chunk_size: 50000  # Proteins per chunk for parallel InterProScan jobs

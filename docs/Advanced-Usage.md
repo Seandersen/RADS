@@ -233,45 +233,223 @@ rule custom_hmmscan:
         """
 ```
 
-## Cluster/HPC Execution
+## Cluster/HPC Execution (SLURM)
 
-### SLURM Configuration
+RADS ships with a ready-to-use SLURM profile at `profiles/slurm/`. It uses the
+Snakemake 8 native SLURM executor (`snakemake-executor-plugin-slurm`, already
+included in the pixi dependencies) to submit each rule as an independent batch
+job, allowing hundreds of genomes to be processed in parallel.
 
-Create `profiles/slurm/config.yaml`:
+### Quick Start
 
-```yaml
-executor: slurm
-jobs: 100
-default-resources:
-  slurm_partition: compute
-  mem_mb: 4000
-  runtime: 60
-  cpus_per_task: 4
-```
-
-Run:
 ```bash
-pixi run snakemake --profile profiles/slurm
+# 1. Install the pixi environment on the login node (one time)
+pixi install
+
+# 2. Submit the pipeline
+pixi run slurm
 ```
 
-### PBS/Torque
+`pixi run slurm` expands to:
+```bash
+mkdir -p logs/slurm && snakemake --profile profiles/slurm
+```
+
+Snakemake stays running on the login node as the orchestrator; all compute
+happens on cluster nodes via `sbatch`.
+
+### Installing Pixi on HPC
+
+Most HPC systems do not ship pixi. Install it to your home directory (which is
+on the shared filesystem and therefore visible from all nodes):
+
+```bash
+curl -fsSL https://pixi.sh/install.sh | bash
+# Follow the prompt to add ~/.pixi/bin to your PATH in ~/.bashrc
+source ~/.bashrc
+```
+
+Verify pixi is available on a compute node:
+```bash
+srun --pty bash -c "which pixi"
+```
+
+If your cluster does not source `~/.bashrc` for batch jobs (some do not), you
+have two options:
+
+**Option A — rely on `--export=ALL` (default for the RADS profile)**
+
+The profile sets `slurm_extra="--export=ALL"`, which instructs SLURM to copy
+the full login-node environment—including `PATH`—into every job. This is the
+simplest approach and works on most clusters.
+
+**Option B — add an explicit PATH to the profile**
+
+If `--export=ALL` is blocked by your cluster policy, open
+`profiles/slurm/config.yaml` and replace the `slurm_extra` line:
 
 ```yaml
-executor: cluster-generic
-cluster-generic-submit-cmd: qsub
 default-resources:
-  nodes: 1
-  ppn: 4
-  walltime: "01:00:00"
+  - slurm_extra="--export=NONE --export=PATH=/home/YOUR_USER/.pixi/bin:$PATH"
 ```
 
-### Cloud Execution (AWS Batch)
+> The `run_defensefinder` rule calls `pixi run -e defensefinder ...` directly.
+> If pixi is not on PATH on compute nodes, that rule will fail. Confirming pixi
+> availability with `srun` (above) before a full run saves debugging time.
+
+### Cluster-Specific Settings
+
+Open `profiles/slurm/config.yaml` and adjust the `default-resources` block for
+your cluster before running:
 
 ```yaml
-executor: aws-batch
-aws-batch-queue: my-queue
-aws-batch-job-role: arn:aws:iam::123456789:role/batch-role
+default-resources:
+  - mem_mb=4000
+  - runtime=60
+  - slurm_extra="--export=ALL"
+  # Uncomment and set these if your cluster requires them:
+  # - slurm_partition=compute
+  # - slurm_account=your_account
 ```
+
+To target a specific partition for all jobs:
+```yaml
+  - slurm_partition=high_mem
+```
+
+To override resources for a single rule (e.g., give InterProScan more time):
+```yaml
+set-resources:
+  run_interproscan:
+    mem_mb: 64000
+    runtime: 960
+```
+
+### What Gets Parallelized
+
+| Rule | Parallelism |
+|---|---|
+| `translate_genome` | One job per genome (hundreds in parallel) |
+| `build_database` | One job per genome |
+| `blast_search` | One job per genome — 8 CPUs, 16 GB each |
+| `extract_orf_ids`, `extract_coordinates`, `create_bed_file`, `extract_contig_sequences` | One job per genome |
+| `run_interproscan` | Single job, 8 CPUs, 32 GB |
+| `run_defensefinder` | Single job, 8 CPUs, 16 GB |
+| `run_interproscan_chunk` *(binomial)* | **One job per ~50k-protein chunk** (see below) |
+
+Per-genome rules scale linearly with your genome count and are all submitted
+simultaneously (up to the `jobs: 100` cap). For a 500-genome run the pipeline
+takes roughly as long as a single-genome run for those steps.
+
+### Binomial Analysis: Parallel InterProScan
+
+When `binomial.enabled: true` and no pre-computed `whole_genome_interproscan`
+path is given, RADS splits the combined whole-genome protein file into chunks
+and runs each chunk as its own SLURM job:
+
+```
+genomes_with_hits_cleaned.faa
+        │
+        ▼  split_proteins_for_binomial (checkpoint)
+        │  seqkit split2 --by-size 50000
+        │
+   ┌────┴──────────────────────────────────┐
+   │  chunk_001.faa  chunk_002.faa  ...     │  ← one SLURM job each
+   └────┬──────────────────────────────────┘
+        │  run_interproscan_chunk (scatter)
+        │  InterProScan -cpu 8 per chunk
+        ▼
+   aggregate_interproscan_chunks (gather)
+        │  cat all TSVs → interproscan_wholegenomes.tsv
+        ▼
+   run_binomial_analysis
+```
+
+The chunk size is configurable in `config/config.yaml`:
+
+```yaml
+binomial:
+  interproscan_chunk_size: 50000  # proteins per SLURM job
+```
+
+Reduce the chunk size to create more (shorter) parallel jobs; increase it if
+you have very few genomes and want fewer jobs. At 50,000 proteins/chunk a
+typical run of 100 bacterial genomes (~400k proteins) produces ~8 parallel
+InterProScan jobs instead of one serial job.
+
+To skip this step entirely and provide your own pre-computed file:
+
+```yaml
+binomial:
+  whole_genome_interproscan: "/path/to/my_precomputed_ips.tsv"
+```
+
+### Monitoring Jobs
+
+```bash
+# Watch job queue
+watch squeue -u $USER
+
+# Check Snakemake log (runs in foreground on login node)
+# Snakemake prints job IDs as they are submitted
+
+# Per-job stdout/stderr
+ls logs/slurm/
+# Files are named by SLURM job ID: slurm-<jobid>.out
+
+# Per-rule logs (always written regardless of cluster mode)
+ls logs/{sample_name}/
+```
+
+### Resuming After Failure
+
+Snakemake tracks completed outputs. If jobs fail or the session is interrupted,
+simply re-run:
+
+```bash
+pixi run slurm
+```
+
+Snakemake will skip finished steps and resubmit only what is missing or
+incomplete. Add `--rerun-incomplete` if any partial output files exist:
+
+```bash
+mkdir -p logs/slurm && snakemake --profile profiles/slurm --rerun-incomplete
+```
+
+### Dry Run
+
+Preview exactly which jobs will be submitted without actually submitting:
+
+```bash
+pixi run dry-run
+# or, to see SLURM resource annotations:
+snakemake --profile profiles/slurm -n
+```
+
+### Adjusting Concurrency
+
+The default cap is 100 simultaneous jobs. Change `jobs:` in
+`profiles/slurm/config.yaml` to match your cluster's fair-use policy:
+
+```yaml
+jobs: 50   # conservative
+jobs: 200  # if your allocation allows
+```
+
+### InterProScan on HPC
+
+InterProScan is not managed by pixi — it requires a separate manual
+installation (see [Installation](Installation.md)). On HPC, the path set in
+`config/config.yaml` must be accessible from compute nodes:
+
+```yaml
+interproscan:
+  path: "/scratch/shared/interproscan-5.76-107.0/interproscan.sh"
+```
+
+Use a path on the shared filesystem (not local scratch) so all nodes can reach
+it.
 
 ## Workflow Visualization
 
