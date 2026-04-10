@@ -70,6 +70,14 @@ rule run_defensefinder:
         # Clean up any previous /tmp/defense-finder results
         rm -rf /tmp/defense-finder 2>/dev/null || true
 
+        # Ensure defense-finder models are installed before running
+        # This is a no-op if models are already current; required on first run in any new environment
+        echo "Checking/updating defense-finder models..." >> {log}
+        pixi run -e defensefinder defense-finder update 2>&1 | tee -a {log}
+        if [ $? -ne 0 ]; then
+            echo "WARNING: defense-finder update failed - will attempt run anyway in case models are already present" >> {log}
+        fi
+
         # Run defense-finder using pixi environment to avoid model version conflicts
         # The pixi defensefinder environment has compatible versions of defense-finder and models
         if pixi run -e defensefinder defense-finder run \
