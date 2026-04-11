@@ -233,6 +233,8 @@ rule run_binomial_analysis:
         csv=f"results/{SAMPLE}/BinomialAnalysis.csv",
     log:
         f"logs/{SAMPLE}/binomial/binomial_analysis.log",
+    conda:
+        "../envs/binomial.yaml"
     shell:
         """
         python workflow/scripts/binomial_analysis.py \
