@@ -20,6 +20,7 @@ openjdk = ">=17"
 openpyxl = ">=3.0"
 hmmer = ">=3.1"
 scipy = ">=1.10"
+statsmodels = ">=0.14"
 
 [feature.dashboard.dependencies]
 shiny = ">=0.6"
