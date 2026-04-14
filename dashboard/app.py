@@ -816,22 +816,23 @@ def server(input, output, session):
 
     @render.text
     def stat_discovery_per_genome():
-        # Calculate from actual data: proportion of genomes with defense systems
-        df = defensefinder_systems()
-        stats = summary_stats()
-        total_genomes = stats.get("total_genomes", 0)
-
-        if df is not None and len(df) > 0 and total_genomes > 0:
-            # Count unique contigs/genomes with defense systems
-            if "replicon" in df.columns:
-                contigs_with_defense = df["replicon"].n_unique()
-                rate = min(contigs_with_defense / total_genomes, 1.0)
-                return f"{rate * 100:.1f}%"
-
-        # Fallback to metrics file
+        # DefenseFinder runs with --db-type unordered on all_contigs.faa, so the
+        # 'replicon' column is the input filename for every row — not genome IDs.
+        # Use the metrics JSON which has the correct count from the pipeline.
         metrics = pipeline_metrics()
         if metrics and metrics.get('discovery_rate_per_genome', 0) > 0:
             return f"{metrics.get('discovery_rate_per_genome', 0) * 100:.1f}%"
+
+        # Fallback: estimate from number of unique defense systems vs total genomes
+        df = defensefinder_systems()
+        stats = summary_stats()
+        total_genomes = stats.get("total_genomes", 0)
+        if df is not None and len(df) > 0 and total_genomes > 0:
+            if "sys_id" in df.columns:
+                unique_systems = df["sys_id"].n_unique()
+                rate = min(unique_systems / total_genomes, 1.0)
+                return f"~{rate * 100:.1f}%"
+
         return "0.0%"
 
     @render.ui

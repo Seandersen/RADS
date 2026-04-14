@@ -90,14 +90,18 @@ rule calculate_metrics:
             with open(input.manifest) as f:
                 total_genomes = len([line for line in f if line.strip()])
 
-            # Count defense systems (skip header)
+            # Count defense systems (skip macsyfinder comment lines and header)
             defense_systems = 0
             defense_file = Path(input.defense_systems)
             if defense_file.exists() and defense_file.stat().st_size > 0:
                 with open(defense_file) as f:
-                    for i, line in enumerate(f):
-                        if i > 0 and line.strip():  # Skip header
-                            defense_systems += 1
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        if line.startswith("replicon\t"):
+                            continue
+                        defense_systems += 1
 
             # Count contigs
             contigs_analyzed = 0
