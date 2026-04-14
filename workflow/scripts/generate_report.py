@@ -337,25 +337,28 @@ def chart_defense_sunburst(defense: list[dict]) -> tuple[str, str]:
     ct_counts: dict[tuple, int] = Counter(
         (r["category"], r["type"]) for r in defense
     )
-    parents, labels, values, colors = [], [], [], []
+    ids, parents, labels, values, colors = [], [], [], [], []
     cat_totals: dict[str, int] = Counter(r["category"] for r in defense)
 
-    # Add category nodes
+    # Add category nodes — use "cat:NAME" as id to avoid collision when
+    # system_type equals the category name (e.g. CBASS → category CBASS)
     for cat, total in cat_totals.items():
+        ids.append(f"cat:{cat}")
         parents.append("")
         labels.append(cat)
         values.append(total)
         colors.append(CATEGORY_COLORS.get(cat, TEAL[4]))
 
-    # Add type nodes
+    # Add type nodes — parent references the category id, not label
     for (cat, typ), cnt in ct_counts.items():
-        parents.append(cat)
+        ids.append(f"type:{cat}/{typ}")
+        parents.append(f"cat:{cat}")
         labels.append(typ)
         values.append(cnt)
         colors.append(CATEGORY_COLORS.get(cat, TEAL[4]))
 
     fig = go.Figure(go.Sunburst(
-        parents=parents, labels=labels, values=values,
+        ids=ids, parents=parents, labels=labels, values=values,
         marker=dict(colors=colors),
         hovertemplate="<b>%{label}</b><br>Systems: %{value}<extra></extra>",
         insidetextorientation="radial",
