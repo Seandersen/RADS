@@ -12,7 +12,8 @@ RADS was developed by Shelby E Andersen in collaboration with Joshua M Kirsch, J
 - **Domain annotation** via InterProScan
 - **Co-transcription analysis** to identify nearby genes
 - **Interactive dashboard** for exploring results
-- **Reproducible environments** via Pixi/Conda
+- **Shareable HTML report** for distributing results without a server
+- **Reproducible environments** via Pixi or Conda
 
 ## Documentation
 
@@ -26,7 +27,8 @@ Full documentation is available in the [docs/](docs/) folder:
 | [Pipeline Overview](docs/Pipeline-Overview.md) | Detailed pipeline steps |
 | [Dashboard Guide](docs/Dashboard-Guide.md) | Using the results explorer |
 | [Troubleshooting](docs/Troubleshooting.md) | Common issues and solutions |
-| [Advanced Usage](docs/Advanced-Usage.md) | Customization and HPC |
+| [Advanced Usage](docs/Advanced-Usage.md) | Customization and advanced features |
+| [SLURM Usage](docs/SLURM-Usage.md) | HPC cluster execution (experimental) |
 
 ## Quick Start
 
@@ -36,6 +38,8 @@ Full documentation is available in the [docs/](docs/) folder:
 curl -fsSL https://pixi.sh/install.sh | bash
 ```
 
+> **Conda/Mamba users:** If Pixi is not available on your system, see [Installation](docs/Installation.md) for the Conda-based setup.
+
 ### 2. Clone and Setup
 
 ```bash
@@ -44,28 +48,6 @@ cd RADS
 git checkout snakemake-pipeline
 pixi install
 ```
-
-### Alternative: Using Mamba/Conda (Recommended for HPC)
-
-If you prefer mamba/conda (recommended for HPC and remote servers):
-
-```bash
-# Install mamba if not already installed
-conda install -n base -c conda-forge mamba
-
-# Create environment using mamba
-mamba env create -f environment.yaml
-conda activate rads
-
-# Install DefenseFinder
-pip install mdmparis-defense-finder
-defense-finder update
-
-# Run pipeline (no --use-conda needed)
-snakemake --cores 8
-```
-
-**Note**: Running without `--use-conda` uses your active environment directly, which is simpler and ensures DefenseFinder models are available.
 
 ### 3. Configure
 
@@ -86,17 +68,11 @@ downstream_nt: 5000
 diamond:
   identity: 30
   threads: 8
-
-interproscan:
-  enabled: false  # Requires separate installation
-
-defensefinder:
-  enabled: true
 ```
 
 ### 4. Create Accession File
 
-Create a file with NCBI nucleotide accessions (one per line):
+One NCBI nucleotide accession per line:
 
 ```
 NC_000913.3
@@ -107,19 +83,34 @@ CP016471.1
 ### 5. Run Pipeline
 
 ```bash
+# Dry run (preview steps)
+pixi run dry-run
+
 # Full pipeline
 pixi run snakemake --cores 8
-
-# Dry run (preview)
-pixi run snakemake -n
 ```
 
-### 6. Explore Results
+### 6. Generate Shareable Report
 
 ```bash
-pixi run dashboard
-# Open http://localhost:8080
+pixi run python workflow/scripts/generate_report.py \
+    --results results/my_analysis \
+    --output  results/my_analysis/report.html
 ```
+
+Open `report.html` in any browser — no server required. Add `--include-locus-viewer` to embed gene-arrow diagrams (larger file).
+
+### 7. Explore Results Interactively
+
+```bash
+# Local machine
+pixi run dashboard
+
+# HPC (then access via browser — see Dashboard Guide)
+pixi run dashboard-hpc
+```
+
+Open `http://localhost:8000` in your browser.
 
 ## Pipeline Overview
 
@@ -135,7 +126,7 @@ Genomes → Translate → BLAST → Extract Contigs → Annotate
 |------|-------------|
 | Download | Fetch genomes from NCBI |
 | Translate | Predict ORFs with Prodigal |
-| BLAST | Search query vs all genomes |
+| BLAST | Search query vs all genomes (Diamond) |
 | Extract | Get flanking regions around hits |
 | Annotate | Domain and defense system analysis |
 
@@ -144,38 +135,28 @@ Genomes → Translate → BLAST → Extract Contigs → Annotate
 ```
 results/{sample}/
 ├── blast_results/master_blast.txt     # Combined BLAST results
-├── all_contigs.fna                    # Extracted flanking regions
+├── all_contigs_filtered.fna           # Extracted flanking regions
 ├── contig_orfs/all_contigs.faa        # Predicted ORFs
 ├── cotranscription/                   # Co-transcribed genes
 ├── defensefinder/                     # Defense systems
 ├── interproscan_results.tsv           # Domain annotations
-└── metrics/pipeline_metrics.json      # Summary statistics
+├── BinomialAnalysis.csv               # Enriched domains
+├── defense_scores.tsv                 # Defense association scores
+├── metrics/pipeline_metrics.json      # Summary statistics
+└── report.html                        # Shareable HTML report
 ```
-
-## Dashboard
-
-The interactive dashboard provides:
-
-- Summary statistics and metrics
-- BLAST result visualization (scatter plots, histograms)
-- Contig and ORF analysis
-- Co-transcription pair tables
-- Domain annotation charts
-- Defense system breakdown
-
-![Dashboard Screenshot](docs/images/dashboard-screenshot.png)
 
 ## Useful Commands
 
 ```bash
-# Visualize workflow
-pixi run snakemake --dag | dot -Tsvg > dag.svg
-
-# Run specific step
-pixi run snakemake results/{sample}/blast_results/master_blast.txt --cores 4
+# Preview workflow (no execution)
+pixi run dry-run
 
 # Resume after failure
 pixi run snakemake --cores 8 --rerun-incomplete
+
+# Run specific step
+pixi run snakemake results/{sample}/blast_results/master_blast.txt --cores 4
 
 # Clean results
 pixi run clean
@@ -184,13 +165,12 @@ pixi run clean
 ## Requirements
 
 - **OS**: macOS (Intel/Apple Silicon), Linux
-- **Disk**: ~10GB for dependencies + genome data
-- **Memory**: 8GB+ recommended
+- **Disk**: ~10 GB for dependencies + genome data
+- **Memory**: 8 GB+ recommended
 
-### Optional
+### Optional (separate installation)
 
-- **InterProScan**: For domain annotation (~15GB)
-- **DefenseFinder database**: For defense system detection
+- **InterProScan**: For domain annotation (~15 GB) — see [Installation](docs/Installation.md)
 
 ## Citation
 
@@ -202,7 +182,6 @@ If you use RADS in your research, please cite:
 
 - **Documentation**: [docs/](docs/)
 - **Issues**: [GitHub Issues](https://github.com/Seandersen/RADS/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/Seandersen/RADS/discussions)
 
 ## License
 

@@ -1,32 +1,28 @@
 # Installation Guide
 
-This guide covers installing RADS on different platforms.
+This guide covers installing RADS on local machines and HPC clusters.
 
 ## Prerequisites
 
-- **Operating System**: macOS (Intel/Apple Silicon), Linux (x86_64)
+- **OS**: macOS (Intel/Apple Silicon), Linux (x86_64)
 - **Internet connection**: Required for downloading genomes from NCBI
-- **Disk space**: ~10GB for pipeline dependencies, plus space for genomes
+- **Disk space**: ~10 GB for pipeline dependencies, plus space for genomes
+
+---
 
 ## Method 1: Pixi (Recommended)
 
-[Pixi](https://pixi.sh) is a fast, cross-platform package manager that handles all dependencies automatically.
+[Pixi](https://pixi.sh) manages all dependencies in a single step and works on most systems, including many HPC clusters.
 
 ### Step 1: Install Pixi
 
-**macOS / Linux:**
 ```bash
 curl -fsSL https://pixi.sh/install.sh | bash
 ```
 
-**Windows (PowerShell):**
-```powershell
-iwr -useb https://pixi.sh/install.ps1 | iex
-```
-
 After installation, restart your terminal or run:
 ```bash
-source ~/.bashrc  # or ~/.zshrc on macOS
+source ~/.bashrc   # or ~/.zshrc on macOS
 ```
 
 ### Step 2: Clone the Repository
@@ -43,371 +39,162 @@ git checkout snakemake-pipeline
 pixi install
 ```
 
-This installs all required packages:
-- Snakemake (workflow management)
-- Diamond (BLAST searches)
-- Prodigal (ORF prediction)
-- SeqKit (sequence manipulation)
-- NCBI datasets CLI (genome downloads)
-- DefenseFinder (defense system detection)
-- Dashboard dependencies (Shiny, Plotly, Polars)
+This installs all required packages including Snakemake, Diamond, Prodigal, SeqKit, NCBI datasets CLI, and the dashboard dependencies (Shiny, Plotly, Polars).
 
-### Step 4: Verify Installation
+### Step 4: Verify
 
 ```bash
-# Check Snakemake
 pixi run snakemake --version
-
-# Check Diamond
-pixi run diamond --version
-
-# Run dry-run to verify workflow
 pixi run dry-run
 ```
 
-## Method 2: Mamba (Recommended) or Conda
+---
 
-Mamba is strongly recommended over conda for faster dependency resolution. Conda's default solver can be extremely slow with complex bioinformatics environments.
+## Method 2: Conda / Mamba
+
+Use this method if Pixi is not available on your system (common on some HPC clusters).
+Mamba is strongly recommended over Conda for faster dependency resolution.
 
 ### Step 1: Install Mamba
 
-**Option A: Install Miniforge (includes mamba)**
+**Option A — Miniforge (recommended, includes mamba):**
 
-Download [Miniforge](https://github.com/conda-forge/miniforge) - this is the recommended approach:
 ```bash
-# macOS/Linux
 curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
 bash Miniforge3-$(uname)-$(uname -m).sh
 ```
 
-**Option B: Add mamba to existing conda**
+**Option B — Add mamba to existing Conda:**
+
 ```bash
 conda install -n base -c conda-forge mamba
 ```
 
-### Step 2: Create Environment
+### Step 2: Clone and Create Environment
 
 ```bash
 git clone https://github.com/Seandersen/RADS.git
 cd RADS
 git checkout snakemake-pipeline
 
-# Using mamba (recommended - much faster)
 mamba env create -f environment.yaml
-conda activate rads
-
-# Or using conda (slower)
-conda env create -f environment.yaml
 conda activate rads
 ```
 
-### Step 3: Install Additional Dependencies
+### Step 3: Install DefenseFinder
 
-Install DefenseFinder and other tools directly in the rads environment:
+DefenseFinder is not in the Conda environment file and must be installed separately:
 
 ```bash
 conda activate rads
-
-# Install DefenseFinder (required for defense system detection)
 pip install mdmparis-defense-finder
-
-# Update DefenseFinder models
 defense-finder update
-
-# Verify installation
-defense-finder --version
-macsydata list
 ```
 
-### Step 4: Run Pipeline
+### Step 4: Run the Pipeline
 
-**Option A: Simple (recommended for most users)**
-
-Run without `--use-conda` to use your rads environment directly:
+Run **without** `--use-conda` so Snakemake uses your active `rads` environment directly:
 
 ```bash
 conda activate rads
 snakemake --cores 8
 ```
 
-This is simpler and avoids environment creation issues.
+> **Why not `--use-conda`?** Snakemake's per-rule conda environments may not have access to the DefenseFinder models installed above. Running against the `rads` environment directly is simpler and more reliable.
 
-**Option B: Isolated environments**
+### HPC note
 
-Use `--use-conda` to have Snakemake create isolated environments for each rule:
-
-```bash
-snakemake --cores 8 --use-conda
-```
-
-**Note**: When using `--use-conda`, Snakemake creates separate conda environments for each rule. This can cause issues if DefenseFinder models aren't properly installed in each environment. Option A is recommended for simplicity.
-
-## Method 3: HPC / Supercomputer Installation
-
-When running on shared computing clusters or supercomputers, we recommend installing all dependencies in a single conda environment and running **without** `--use-conda`. This avoids network filesystem issues and ensures DefenseFinder models are properly available.
-
-### Step 1: Configure Conda for Network Filesystems
+On shared HPC clusters, configure Conda to copy files rather than symlink (required on network filesystems like NFS or Lustre):
 
 ```bash
 conda config --set always_copy true
 conda config --set channel_priority strict
 ```
 
-### Step 2: Create and Setup Environment
+---
 
-```bash
-git clone https://github.com/Seandersen/RADS.git
-cd RADS
-git checkout snakemake-pipeline
+## Optional: InterProScan
 
-# Create environment
-conda env create -f environment.yaml
-conda activate rads
+InterProScan provides detailed domain annotations but requires a separate manual installation (~15 GB).
 
-# Install DefenseFinder
-pip install mdmparis-defense-finder
-
-# Update DefenseFinder models
-defense-finder update
-
-# Verify
-defense-finder --version
-macsydata list
-```
-
-### Step 3: Run Pipeline (Recommended Method)
-
-Run **without** `--use-conda` to use your rads environment directly:
-
-```bash
-conda activate rads
-snakemake --cores 20
-```
-
-This is the **recommended approach for HPC** because:
-- Avoids symlink issues on network filesystems
-- DefenseFinder models are properly available
-- No need to manage multiple conda environments
-- Simpler and more reliable
-
-### Alternative: Using --use-conda on HPC
-
-If you must use `--use-conda`, store environments on local disk:
-
-```bash
-mkdir -p /tmp/$USER/snakemake_conda
-snakemake --cores 20 --use-conda --conda-prefix /tmp/$USER/snakemake_conda
-```
-
-**Note**: With `--use-conda`, you may need to manually install DefenseFinder models in each Snakemake-created environment, which can be error-prone.
-
-Common local storage paths on HPC systems:
-- `/tmp/$USER/`
-- `/scratch/$USER/`
-- `/local/$USER/`
-
-### Example HPC Run Command
-
-```bash
-snakemake --cores 20 --use-conda --conda-prefix /tmp/$USER/snakemake_conda
-```
-
-### Troubleshooting HPC Issues
-
-**Error: `[Errno 95] Operation not supported: 'cacert.pem'`**
-
-This indicates symlink issues on network filesystem. Solution:
-```bash
-conda config --set always_copy true
-rm -rf .snakemake/conda/*  # Clear failed environments
-snakemake --cores 20 --use-conda --conda-prefix /tmp/$USER/snakemake_conda
-```
-
-## Optional: InterProScan Setup
-
-InterProScan provides domain annotations but requires separate installation due to its size (~15GB).
-
-### Download InterProScan
+### Download and Setup
 
 ```bash
 mkdir my_interproscan && cd my_interproscan
-
-# Download (choose appropriate version)
 wget https://ftp.ebi.ac.uk/pub/software/unix/iprscan/5/5.69-101.0/interproscan-5.69-101.0-64-bit.tar.gz
-
-# Extract
 tar -pxvzf interproscan-5.69-101.0-64-bit.tar.gz
 cd interproscan-5.69-101.0
-
-# Setup
 python3 setup.py -f interproscan.properties
 ```
 
 ### Configure RADS
 
-Update `config/config.yaml`:
-
 ```yaml
+# config/config.yaml
 interproscan:
   enabled: true
   path: "/absolute/path/to/interproscan-5.69-101.0/interproscan.sh"
-  applications: "Pfam"  # Recommended: Pfam only for reliability
+  applications: "Pfam"
 ```
 
-### Recommended: Use Pfam Only
+**Recommended: Pfam only.** Some InterProScan analyses (MobiDBLite, Panther, ProSiteProfiles) have binary dependencies that frequently fail on HPC systems.
 
-Some InterProScan analyses (MobiDBLite, Panther, ProSiteProfiles) have binary dependencies that frequently fail on HPC systems. We recommend running only Pfam analysis:
+Safe analyses to add: `Pfam`, `CDD`, `TIGRFAM`
 
-```yaml
-interproscan:
-  enabled: true
-  path: "/path/to/interproscan.sh"
-  applications: "Pfam"  # Most reliable
-```
+**Platform notes:**
+- Linux x86_64: Full InterProScan support
+- macOS Intel: Works but slower
+- macOS Apple Silicon (M1/M2/M3): Requires Rosetta 2 or Docker
+- HPC: Use Pfam-only to avoid binary compatibility issues
 
-If you need more analyses, these are generally safe to add:
-```yaml
-  applications: "Pfam,CDD,TIGRFAM"
-```
-
-**Avoid these analyses** (often have binary/dependency issues):
-- MobiDBLite
-- Panther
-- ProSiteProfiles
-
-### Platform Notes
-
-- **Linux x86_64**: Full InterProScan support
-- **macOS Intel**: Works but slower
-- **macOS Apple Silicon (M1/M2/M3)**: InterProScan requires Rosetta 2 or Docker
-- **HPC/Clusters**: Use Pfam-only mode to avoid binary compatibility issues
-- **Alternative**: Disable InterProScan and annotate sequences manually
-
-## Optional: DefenseFinder Database
-
-DefenseFinder requires its database to be downloaded on first run:
-
-```bash
-pixi run defense-finder update
-```
-
-This downloads the MacSyFinder models for defense system detection.
+---
 
 ## Verifying Your Installation
 
-Run a test analysis with the included test data:
-
 ```bash
-# Create a small test accession file
-echo "NC_000913.3" > test_accessions.txt
-
-# Update config for test
-# Edit config/config.yaml:
-#   sample_name: "installation_test"
-#   download:
-#     enabled: true
-#     accession_file: "test_accessions.txt"
-
-# Run dry-run
-pixi run snakemake -n
-
-# If dry-run succeeds, run full test
-pixi run snakemake --cores 4
+# Dry run — checks config and previews steps without executing
+pixi run dry-run
+# or (conda):
+snakemake -n
 ```
+
+---
 
 ## Troubleshooting Installation
 
-### Pixi Installation Fails
+### Conda solver too slow
 
 ```bash
-# Clear Pixi cache
-rm -rf ~/.pixi
-
-# Reinstall
-curl -fsSL https://pixi.sh/install.sh | bash
-```
-
-### Conda Solver Too Slow
-
-Use Mamba instead (strongly recommended):
-```bash
-# Option 1: Install mamba directly
-conda install -n base -c conda-forge mamba
-
-# Then use mamba instead of conda
-mamba env create -f environment.yaml
-
-# Option 2: Use libmamba solver with conda
+# Install libmamba solver
 conda install -n base conda-libmamba-solver
 conda config --set solver libmamba
+
+# Or use mamba directly
+mamba env create -f environment.yaml
 ```
 
-### DefenseFinder Module Error
+### DefenseFinder module error
 
-If you see "ModuleNotFoundError: No module named 'macsypy'":
-```bash
-# Reinstall DefenseFinder dependencies
-pixi run pip install macsyfinder defense-finder --force-reinstall
-```
-
-### Permission Denied Errors
+If you see `ModuleNotFoundError: No module named 'macsypy'`:
 
 ```bash
-# Fix script permissions
-chmod +x RADS.sh
-chmod +x workflow/scripts/*.py
+pip install macsyfinder mdmparis-defense-finder --force-reinstall
 ```
 
-## Running the Dashboard Without Pixi
+### Pixi not available on compute nodes
 
-If pixi is not available (e.g., on HPC systems), you can run the dashboard using conda/pip:
-
-### Install Dashboard Dependencies
+If your HPC does not export the login-node `PATH` to batch jobs, add Pixi explicitly:
 
 ```bash
-# Option 1: Create a new conda environment
-conda create -n rads-dashboard python=3.10 -c conda-forge -y
-conda activate rads-dashboard
-pip install shiny polars plotly pandas pyarrow
-
-# Option 2: Install in existing environment
-pip install shiny polars plotly pandas pyarrow
+export PATH="$HOME/.pixi/bin:$PATH"
 ```
 
-### Run the Dashboard
+Or add this to your job script header.
 
-```bash
-cd /path/to/RADS
-shiny run dashboard/app.py --port 8000
-```
-
-### Remote Access (SSH Tunnel)
-
-When running on a remote server/HPC, create an SSH tunnel to access the dashboard:
-
-**On your local machine**, open a new terminal:
-```bash
-ssh -L 8000:localhost:8000 username@remote-server
-```
-
-Then open `http://localhost:8000` in your local browser.
-
-### Keep Dashboard Running (screen/tmux)
-
-To keep the dashboard running after disconnecting:
-
-```bash
-# Start a screen session
-screen -S dashboard
-shiny run dashboard/app.py --port 8000
-
-# Detach: press Ctrl+A, then D
-# Reattach later: screen -r dashboard
-```
-
-See [[Dashboard-Guide]] for detailed dashboard usage.
+---
 
 ## Next Steps
 
-- [[Configuration]] - Learn how to configure the pipeline
-- [[Pipeline-Overview]] - Understand the analysis steps
+- [Configuration](Configuration.md) — set up your analysis
+- [Pipeline Overview](Pipeline-Overview.md) — understand the steps
+- [Advanced Usage](Advanced-Usage.md) — HPC and customization

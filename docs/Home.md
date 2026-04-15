@@ -23,9 +23,10 @@ RADS (Recombinase Associated Defense Search) is a bioinformatics pipeline for ex
 | [[Installation]] | Setup instructions for all platforms |
 | [[Configuration]] | Configuration file reference |
 | [[Pipeline-Overview]] | Detailed pipeline steps |
-| [[Dashboard-Guide]] | Using the results dashboard |
+| [[Dashboard-Guide]] | Interactive dashboard and shareable HTML report |
 | [[Troubleshooting]] | Common issues and solutions |
-| [[Advanced-Usage]] | Advanced features and customization |
+| [[Advanced-Usage]] | Customization and advanced features |
+| [[SLURM-Usage]] | HPC cluster execution (experimental) |
 
 ## Quick Start
 

@@ -1,459 +1,311 @@
 # Troubleshooting Guide
 
-This page covers common issues and their solutions.
+---
 
 ## Installation Issues
 
 ### Pixi Won't Install
 
-**Symptom:** `curl: command not found` or download fails
-
-**Solution:**
 ```bash
-# On macOS, install curl via Homebrew
-brew install curl
-
 # Alternative installation method
 wget -qO- https://pixi.sh/install.sh | bash
 ```
 
-### Dependencies Fail to Install
+### Conda Solver Too Slow
 
-**Symptom:** `pixi install` shows solver errors
-
-**Solution:**
+Use Mamba instead:
 ```bash
-# Clear cache and retry
-rm -rf ~/.pixi/cache
-pixi install
+conda install -n base -c conda-forge mamba
+mamba env create -f environment.yaml
 
-# If specific package fails, try pinning version
-# Edit pixi.toml and specify exact version
+# Or enable the libmamba solver for conda
+conda install -n base conda-libmamba-solver
+conda config --set solver libmamba
 ```
 
 ### DefenseFinder Module Error
 
 **Symptom:** `ModuleNotFoundError: No module named 'macsypy'`
 
-**Cause:** Python version incompatibility (Python 3.13)
-
-**Solution:**
 ```bash
-# Option 1: Disable DefenseFinder in config
-# Edit config/config.yaml:
+# Reinstall
+pip install macsyfinder mdmparis-defense-finder --force-reinstall
+
+# Or disable if not needed
+# config/config.yaml:
 defensefinder:
   enabled: false
-
-# Option 2: The pipeline handles this gracefully
-# Empty output files will be created automatically
 ```
+
+---
 
 ## Pipeline Execution Issues
 
+### SyntaxError When Running Scripts
+
+**Symptom:** `SyntaxError: Non-ASCII character` or `SyntaxError: invalid syntax` on f-strings
+
+**Cause:** The system `python` command points to Python 2.
+
+**Solution:** Always use `pixi run python` or `python3`:
+
+```bash
+# Wrong:
+python workflow/scripts/generate_report.py ...
+
+# Correct:
+pixi run python workflow/scripts/generate_report.py ...
+# or:
+python3 workflow/scripts/generate_report.py ...
+```
+
+### IncompleteFilesException
+
+**Symptom:**
+```
+IncompleteFilesException: The files below seem to be incomplete...
+```
+
+**Cause:** A previous run was interrupted before a rule finished writing its output. Snakemake marks the output as incomplete.
+
+**Solution:**
+```bash
+# Clear the incomplete marker
+rm -rf .snakemake/incomplete/
+
+# Then re-run normally
+pixi run snakemake --cores 8
+# or add --rerun-incomplete to be explicit:
+pixi run snakemake --cores 8 --rerun-incomplete
+```
+
 ### "Nothing to be done"
 
-**Symptom:** Snakemake says nothing to do, but outputs are missing
+**Symptom:** Snakemake says nothing to do but expected outputs are missing.
 
-**Solutions:**
-
-1. **Check if outputs exist:**
+1. Check if outputs exist:
    ```bash
    ls -la results/{sample}/blast_results/master_blast.txt
    ```
-
-2. **Force regeneration:**
-   ```bash
-   pixi run snakemake --forceall --cores 8
-   ```
-
-3. **Clear Snakemake metadata:**
+2. Clear Snakemake metadata and retry:
    ```bash
    rm -rf .snakemake/metadata
    pixi run snakemake --cores 8
    ```
-
-4. **Explicitly target outputs:**
+3. Force regeneration:
    ```bash
-   pixi run snakemake results/{sample}/metrics/pipeline_metrics.json --cores 8
+   pixi run snakemake --forceall --cores 8
    ```
 
 ### Genome Download Fails
 
-**Symptom:** `download_genomes` rule fails
+**Valid accession formats:**
+```
+NC_000913.3
+NZ_CP088158.1
+CP016471.1
+GCF_000001405.40
+```
 
-**Solutions:**
+**Test a single accession:**
+```bash
+pixi run datasets summary genome accession NC_000913.3
+pixi run datasets download genome accession NC_000913.3 --filename test.zip
+```
 
-1. **Check accession format:**
-   ```bash
-   # Valid formats:
-   NC_000913.3
-   NZ_CP088158.1
-   CP016471.1
-   GCF_000001405.40
-   ```
+**Use local genomes instead:**
+```yaml
+# config/config.yaml
+download:
+  enabled: false
+genomes_path: "path/to/local/genomes"
+```
 
-2. **Check internet connection:**
-   ```bash
-   pixi run datasets summary genome accession NC_000913.3
-   ```
+### BLAST Returns No Hits
 
-3. **Download manually:**
-   ```bash
-   pixi run datasets download genome accession NC_000913.3 --filename test.zip
-   ```
-
-4. **Use local genomes instead:**
-   ```yaml
-   # config/config.yaml
-   download:
-     enabled: false
-   genomes_path: "path/to/local/genomes"
-   ```
-
-### BLAST Search Returns No Hits
-
-**Symptom:** `master_blast.txt` is empty or has only header
-
-**Solutions:**
-
-1. **Check query format:**
+1. **Check query format** — must be amino acid FASTA:
    ```bash
    head resources/query.fa
-   # Should be amino acid FASTA:
-   # >protein_name
-   # MKTQPIKVN...
+   # Expected: >protein_name followed by amino acid sequence
    ```
-
 2. **Lower identity threshold:**
    ```yaml
    diamond:
-     identity: 20  # Lower from default 30
+     identity: 20   # default is 30
    ```
-
-3. **Verify databases built correctly:**
+3. **Verify databases were built:**
    ```bash
-   ls -la results/{sample}/diamond_dbs/*.dmnd
-   ```
-
-4. **Test BLAST manually:**
-   ```bash
-   pixi run diamond blastp -d results/{sample}/diamond_dbs/genome1.dmnd \
-       -q resources/query.fa -o test_blast.txt
+   ls -lh results/{sample}/diamond_dbs/*.dmnd
    ```
 
 ### InterProScan Fails
 
-**Symptom:** Rule fails with InterProScan errors
-
-**Solutions:**
-
-1. **Verify InterProScan installation:**
+1. **Verify installation:**
    ```bash
    /path/to/interproscan.sh --version
+   java -version   # needs Java 11+
    ```
-
-2. **Check Java version:**
-   ```bash
-   java -version  # Needs Java 11+
+2. **Use absolute path in config** (not relative)
+3. **Switch to Pfam-only** if binary errors occur (MobiDB, Panther, ProSiteProfiles):
+   ```yaml
+   interproscan:
+     applications: "Pfam"
    ```
-
-3. **Disable if not needed:**
+4. **Disable if not needed:**
    ```yaml
    interproscan:
      enabled: false
    ```
 
-4. **Check path is absolute:**
-   ```yaml
-   interproscan:
-     path: "/absolute/path/to/interproscan.sh"  # Not relative
-   ```
-
-### InterProScan Binary Errors (MobiDB, Panther, ProSiteProfiles)
-
-**Symptom:** Errors like `FileNotFoundError: bin/panther/epa-ng` or `Error running prosite binary`
-
-**Cause:** Some InterProScan analyses have binary dependencies that fail on certain systems, especially HPC clusters.
-
-**Solution:** Configure InterProScan to run only Pfam (most reliable):
-
-```yaml
-# config/config.yaml
-interproscan:
-  enabled: true
-  path: "/path/to/interproscan.sh"
-  applications: "Pfam"  # Only run Pfam analysis
-```
-
-Safe analyses to include: `Pfam`, `CDD`, `TIGRFAM`
-
-Avoid these (often fail): `MobiDBLite`, `Panther`, `ProSiteProfiles`
-
 **Rerun after fixing:**
 ```bash
 rm -f results/{sample}/interproscan_results.tsv
-snakemake --cores 8 --use-conda --forcerun run_interproscan
+pixi run snakemake results/{sample}/interproscan_results.tsv --cores 8
 ```
 
 ### Out of Memory
 
-**Symptom:** Jobs killed with memory errors
+```bash
+# Reduce parallelism
+pixi run snakemake --cores 2
 
-**Solutions:**
-
-1. **Reduce parallelism:**
-   ```bash
-   pixi run snakemake --cores 2  # Fewer parallel jobs
-   ```
-
-2. **Process fewer genomes:**
-   ```yaml
-   download:
-     max_genomes: 50  # Limit initial run
-   ```
-
-3. **Increase system swap:**
-   ```bash
-   # Linux
-   sudo fallocate -l 8G /swapfile
-   sudo chmod 600 /swapfile
-   sudo mkswap /swapfile
-   sudo swapon /swapfile
-   ```
+# Limit genome count in config
+download:
+  max_genomes: 50
+```
 
 ### Disk Space Issues
 
-**Symptom:** "No space left on device"
+```bash
+# Remove downloaded genomes after staging (they're copied to results/{sample}/genomes/)
+rm -rf results/{sample}/downloaded_genomes
 
-**Solutions:**
+# Clean results and logs entirely
+pixi run clean
 
-1. **Clean intermediate files:**
-   ```bash
-   pixi run clean  # Removes results and logs
-   ```
+# Clean Snakemake logs
+rm -rf .snakemake/log/*
+```
 
-2. **Remove downloaded genomes after staging:**
-   ```bash
-   rm -rf results/{sample}/downloaded_genomes
-   ```
-
-3. **Clean Snakemake logs:**
-   ```bash
-   rm -rf .snakemake/log/*
-   ```
+---
 
 ## Dashboard Issues
 
 ### Dashboard Won't Start
 
-**Symptom:** Error when running `pixi run dashboard`
+```bash
+# Check dependencies
+pixi run python -c "import shiny; import plotly; import polars"
 
-**Solutions:**
+# Check for port conflicts
+lsof -i :8000
 
-1. **Check dependencies:**
-   ```bash
-   pixi run python -c "import shiny; import plotly; import polars"
-   ```
-
-2. **Check port availability:**
-   ```bash
-   # Kill existing process
-   pkill -f "shiny run"
-
-   # Use different port
-   pixi run shiny run dashboard/app.py --port 9000
-   ```
-
-3. **Check for Python errors:**
-   ```bash
-   pixi run python dashboard/app.py
-   ```
+# Kill existing process and retry
+pkill -f "shiny run"
+pixi run dashboard
+```
 
 ### No Samples in Dropdown
 
-**Symptom:** Sample selector is empty
-
-**Solution:**
 ```bash
-# Ensure results directory exists with completed analyses
 ls results/
-# Should show sample directories like: efb0058_hits/
+# Should show completed sample directories
 ```
 
 ### Plots Not Rendering
 
-**Symptom:** Blank charts or "No data available"
+- Verify files exist: `ls results/{sample}/blast_results/master_blast.txt`
+- Check for content: `wc -l results/{sample}/blast_results/master_blast.txt`
+- Try refreshing the browser and checking the browser console for errors
 
-**Solutions:**
+### Missing Defense Score or Binomial Plots
 
-1. **Check data files exist:**
-   ```bash
-   ls results/{sample}/blast_results/master_blast.txt
-   ```
+- Defense scores require both DefenseFinder **and** co-transcription to complete first
+- Binomial enrichment requires `binomial.enabled: true` in config and InterProScan to be enabled
+- Check that `results/{sample}/defense_scores.tsv` and `results/{sample}/BinomialAnalysis.csv` exist
 
-2. **Verify data format:**
-   ```bash
-   head results/{sample}/blast_results/master_blast.txt
-   ```
+### Dashboard Access from HPC
 
-3. **Test data loading:**
-   ```bash
-   pixi run python -c "
-   import sys
-   sys.path.insert(0, 'dashboard')
-   from utils.data_loader import load_blast_results
-   df = load_blast_results('results/{sample}')
-   print(len(df) if df is not None else 'No data')
-   "
-   ```
+See [Dashboard Guide](Dashboard-Guide.md) for:
+- Open OnDemand node proxy setup
+- SSH tunnel setup
+- `pixi run dashboard-hpc` (use instead of `pixi run dashboard` on remote servers)
+
+---
 
 ## Configuration Issues
 
 ### Config File Not Found
 
-**Symptom:** `FileNotFoundError: config/config.yaml`
-
-**Solution:**
 ```bash
-# Ensure you're in the RADS directory
-pwd  # Should be /path/to/RADS
-
-# Check config exists
+pwd   # must be in the RADS directory
 ls config/config.yaml
 
-# Or specify config explicitly
+# Or specify explicitly
 pixi run snakemake --configfile /absolute/path/to/config.yaml --cores 8
 ```
 
 ### YAML Syntax Errors
 
-**Symptom:** `yaml.scanner.ScannerError`
+**Common causes:** tabs instead of spaces, missing colons, unquoted special characters.
 
-**Common causes:**
-- Tabs instead of spaces (use 2 spaces)
-- Missing colons
-- Unquoted special characters
-
-**Solution:** Validate YAML:
 ```bash
 pixi run python -c "import yaml; yaml.safe_load(open('config/config.yaml'))"
 ```
 
-## Getting Help
+---
 
-### Debug Mode
+## HPC / Network Filesystem Issues
 
-Run with verbose output:
-```bash
-pixi run snakemake --cores 4 --verbose --printshellcmds
-```
+### Symlink Errors
 
-### Check Logs
+**Symptom:** `[Errno 95] Operation not supported: 'cacert.pem'`
 
-```bash
-# Snakemake logs
-ls .snakemake/log/
-
-# Rule-specific logs
-cat logs/{sample}/blast_search.log
-cat logs/{sample}/defensefinder.log
-```
-
-### Report Issues
-
-When reporting issues, include:
-
-1. **Command run:**
-   ```bash
-   pixi run snakemake --cores 8
-   ```
-
-2. **Error message:** (full traceback)
-
-3. **Config file:** (sanitized)
-
-4. **System info:**
-   ```bash
-   uname -a
-   pixi run snakemake --version
-   pixi run python --version
-   ```
-
-5. **Log files:** Attach relevant logs from `logs/` directory
-
-File issues at: https://github.com/Seandersen/RADS/issues
-
-## HPC / Supercomputer Issues
-
-### Symlink Errors on Network Filesystem
-
-**Symptom:** `[Errno 95] Operation not supported: 'cacert.pem' -> ...`
-
-**Cause:** Network filesystems (NFS, Lustre, CIFS) don't support symbolic links, which conda uses by default.
-
-**Solution:**
-
-1. **Configure conda to copy instead of symlink:**
-   ```bash
-   conda config --set always_copy true
-   ```
-
-2. **Store conda environments on local disk:**
-   ```bash
-   # Clean failed environments
-   rm -rf .snakemake/conda/*
-
-   # Run with local conda prefix
-   snakemake --cores 20 --use-conda --conda-prefix /tmp/$USER/snakemake_conda
-   ```
-
-### Dashboard Access from Remote Server
-
-**Symptom:** Dashboard runs but can't access in browser
-
-**Cause:** The dashboard is running on remote server, not your local machine.
-
-**Solution:** Create an SSH tunnel from your local machine:
+**Cause:** Network filesystems (NFS, Lustre) don't support symbolic links used by Conda.
 
 ```bash
-# On your LOCAL machine, open a new terminal:
-ssh -L 8000:localhost:8000 username@remote-server
-
-# Then open http://localhost:8000 in your local browser
+conda config --set always_copy true
+rm -rf .snakemake/conda/*
 ```
 
-### Missing pyarrow
-
-**Symptom:** `ModuleNotFoundError: No module named 'pyarrow'`
-
-**Solution:**
-```bash
-pip install pyarrow
-```
-
-### Running Dashboard Without Pixi
-
-If pixi isn't available on your HPC system:
+### Pixi Not Found on Compute Nodes
 
 ```bash
-# Create conda environment
-conda create -n rads-dashboard python=3.10 -c conda-forge -y
-conda activate rads-dashboard
-pip install shiny polars plotly pandas pyarrow
-
-# Run dashboard
-cd /path/to/RADS
-shiny run dashboard/app.py --port 8000
+export PATH="$HOME/.pixi/bin:$PATH"
 ```
 
-## Common Error Messages
+Add this to your job script header, or see [SLURM Usage](SLURM-Usage.md) for profile-level solutions.
+
+---
+
+## Common Error Reference
 
 | Error | Cause | Solution |
 |-------|-------|----------|
 | `MissingOutputException` | Rule didn't create expected output | Check rule log, verify input exists |
-| `ProtectedOutputException` | Trying to overwrite protected file | Use `--forceall` or delete output |
+| `IncompleteFilesException` | Previous run interrupted | `rm -rf .snakemake/incomplete/` then rerun |
 | `MissingInputException` | Required input file missing | Run prerequisite rules first |
-| `WorkflowError: Conda environment file cannot be found` | Missing env file | Check workflow/envs/ exists |
-| `command not found: diamond` | Tool not in PATH | Run via `pixi run snakemake` |
-| `[Errno 95] Operation not supported` | Network filesystem symlink issue | Use `--conda-prefix` with local path |
+| `command not found: diamond` | Tool not in PATH | Use `pixi run snakemake` |
+| `SyntaxError: Non-ASCII character` | Running Python 2 | Use `pixi run python` or `python3` |
+| `[Errno 95] Operation not supported` | Network filesystem symlink issue | `conda config --set always_copy true` |
 | `FileNotFoundError: bin/panther/epa-ng` | InterProScan binary missing | Use `applications: "Pfam"` in config |
+| `ModuleNotFoundError: No module named 'statsmodels'` | Missing dependency | Use `pixi run python`; statsmodels is in the pixi environment |
+
+---
+
+## Getting Help
+
+Run with verbose output to capture more detail:
+```bash
+pixi run snakemake --cores 4 --verbose --printshellcmds
+```
+
+Check logs:
+```bash
+ls .snakemake/log/
+cat logs/{sample}/blast_search.log
+```
+
+When reporting issues, include: the command run, full error traceback, config file, and relevant log files.
+
+File issues at: https://github.com/Seandersen/RADS/issues
