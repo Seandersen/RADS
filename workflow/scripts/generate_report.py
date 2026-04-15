@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 RADS Pipeline — Standalone HTML Report Generator
 =================================================
@@ -384,18 +385,17 @@ def _no_data(msg: str = "No data available.") -> str:
 # Chart builders — Summary
 # ---------------------------------------------------------------------------
 
-def chart_pipeline_funnel(metrics: dict, blast: list, cotx: list, defense: list) -> str:
+def chart_pipeline_funnel(metrics: dict, blast: list, defense: list) -> str:
     genomes = metrics.get("total_genomes", 0)
     blast_genomes = len({r["genome"] for r in blast if "genome" in r})
     contigs = metrics.get("contigs_analyzed", 0)
-    cotx_pairs = len(cotx)
     def_systems = len(defense)
 
     stages = ["Input Genomes", "Genomes with BLAST Hits",
-              "Contigs Analyzed", "Co-transcribed Pairs", "Defense Systems"]
-    values = [genomes, blast_genomes, contigs, cotx_pairs, def_systems]
+              "Contigs Analyzed", "Defense Systems"]
+    values = [genomes, blast_genomes, contigs, def_systems]
 
-    colors = [TEAL[0], TEAL[1], TEAL[2], TEAL[3], TEAL[4]]
+    colors = [TEAL[0], TEAL[1], TEAL[2], TEAL[3]]
     fig = go.Figure(go.Funnel(
         y=stages, x=values,
         marker=dict(color=colors),
@@ -405,16 +405,15 @@ def chart_pipeline_funnel(metrics: dict, blast: list, cotx: list, defense: list)
     fig.update_layout(
         **_layout(margin=dict(t=50, b=30, l=200, r=80)),
         title="Pipeline Analysis Funnel",
-        height=340,
+        height=300,
     )
     return _fig_html(fig)
 
 
-def chart_organism_breakdown(organism_map: dict) -> str:
-    if not organism_map:
-        return _no_data("No genome data available.")
-    counts = Counter(organism_map.values())
+def _genus_bar(counts: Counter, title: str) -> str:
     top = counts.most_common(20)
+    if not top:
+        return _no_data("No genus data available.")
     labels, vals = zip(*top)
     colors = (TEAL * 5)[:len(labels)]
     fig = go.Figure(go.Bar(
@@ -424,12 +423,37 @@ def chart_organism_breakdown(organism_map: dict) -> str:
     ))
     fig.update_layout(
         **_layout(margin=dict(t=50, b=40, l=160, r=30)),
-        title=f"Input Genomes by Genus (top 20 of {len(counts):,} genera)",
+        title=title,
         xaxis_title="Number of Genomes",
         yaxis=dict(categoryorder="total ascending"),
         height=max(350, len(labels) * 22),
     )
     return _fig_html(fig)
+
+
+def chart_organism_breakdown(organism_map: dict) -> str:
+    if not organism_map:
+        return _no_data("No genome data available.")
+    counts = Counter(organism_map.values())
+    return _genus_bar(
+        counts,
+        f"Input Genomes by Genus (top 20 of {len(counts):,} genera)",
+    )
+
+
+def chart_output_organism_breakdown(organism_map: dict, blast: list) -> str:
+    """Genus breakdown limited to genomes that had at least one BLAST hit."""
+    if not organism_map or not blast:
+        return _no_data("No BLAST hit genomes available.")
+    hit_genomes = {r["genome"] for r in blast if "genome" in r}
+    hit_genera = [organism_map[g] for g in hit_genomes if g in organism_map]
+    if not hit_genera:
+        return _no_data("Genome IDs from BLAST results not found in genome directory.")
+    counts = Counter(hit_genera)
+    return _genus_bar(
+        counts,
+        f"Genomes with BLAST Hits by Genus (top 20 of {len(counts):,} genera)",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -612,30 +636,46 @@ def chart_cotx_domains(ips: list, cotx: list) -> str:
 def chart_defense_scores(scores: list) -> str:
     if not scores:
         return _no_data("No defense scores available.")
-    # Try to find score column and identifier column
-    if not scores:
-        return _no_data()
     cols = list(scores[0].keys())
     score_col = next((c for c in cols if "score" in c.lower()), None)
-    id_col = cols[0] if cols else None
-    if score_col is None or id_col is None:
-        return html_table(
-            headers=cols[:6],
-            rows=[[_esc(r.get(c, "")) for c in cols[:6]] for r in scores[:50]],
-            caption="Defense Scores (top 50)",
-        )
-    # Sort by score descending
+
     def parse_score(r):
         try:
-            return float(r.get(score_col, 0))
+            return float(r.get(score_col, 0)) if score_col else 0.0
         except ValueError:
             return 0.0
-    top = sorted(scores, key=parse_score, reverse=True)[:50]
-    return html_table(
-        headers=[_esc(c) for c in cols[:6]],
-        rows=[[_esc(r.get(c, "")) for c in cols[:6]] for r in top],
-        caption=f"Top 50 defense scores (by {score_col})",
+
+    if score_col is None:
+        # Unknown format — just show all columns as-is
+        return html_table(
+            headers=cols,
+            rows=[[_esc(r.get(c, "")) for c in cols] for r in scores[:100]],
+            caption="Defense scores (first 100 rows)",
+        )
+
+    sorted_scores = sorted(scores, key=parse_score, reverse=True)
+    top50    = sorted_scores[:50]
+    bottom50 = sorted_scores[-50:][::-1]   # lowest first → reversed so worst is at top
+
+    display_cols = cols  # show all columns from the TSV
+    headers = [_esc(c) for c in display_cols]
+
+    top_table = html_table(
+        headers=headers,
+        rows=[[_esc(r.get(c, "")) for c in display_cols] for r in top50],
+        table_id="scores-top-table",
+        caption=f"Top 50 by {score_col} (highest = most defense-associated)",
     )
+    bottom_table = html_table(
+        headers=headers,
+        rows=[[_esc(r.get(c, "")) for c in display_cols] for r in bottom50],
+        table_id="scores-bottom-table",
+        caption=f"Bottom 50 by {score_col} (lowest scores)",
+    )
+    return (f"<h4 style='margin:12px 0 6px;color:var(--teal-dark)'>Top 50</h4>"
+            + top_table
+            + f"<h4 style='margin:18px 0 6px;color:var(--teal-dark)'>Bottom 50</h4>"
+            + bottom_table)
 
 
 # ---------------------------------------------------------------------------
@@ -1404,11 +1444,12 @@ def build_html(
     t_summary = f"""
     <div class='metrics-grid'>{cards}</div>
     {chart_card("Pipeline Analysis Funnel",
-        chart_pipeline_funnel(metrics, blast, cotx, defense))}
+        chart_pipeline_funnel(metrics, blast, defense))}
     <div class='two-col'>
         {chart_card("Input Genomes by Genus", chart_organism_breakdown(organism_map))}
-        {chart_card("Defense System Categories", chart_defense_categories(defense))}
+        {chart_card("Output Genomes by Genus", chart_output_organism_breakdown(organism_map, blast))}
     </div>
+    {chart_card("Defense System Categories", chart_defense_categories(defense))}
     """
 
     # ============================================================
