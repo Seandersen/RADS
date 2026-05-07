@@ -44,6 +44,7 @@ CATEGORY_COLORS = {
     "Toxin-antitoxin":          "#6b9e96",
     "Retrons":                  "#7aaeae",
     "tRNA degradation":         "#8fb3b3",
+    "Anti-defense":             "#9bbfbf",
     "Unknown mechanism":        "#a8c4c4",
 }
 
@@ -94,7 +95,8 @@ _CAT_EXACT = {
     "PrrC": "tRNA degradation", "RloC": "tRNA degradation", "CapRel": "tRNA degradation",
     "DRT": "Toxin-antitoxin", "MazEF": "Toxin-antitoxin", "RexAB": "Toxin-antitoxin",
     "RnlAB": "Toxin-antitoxin", "SoFIC": "Toxin-antitoxin",
-    "RosmerTA": "Toxin-antitoxin", "ShosTA": "Toxin-antitoxin",
+    "RosmerTA": "Toxin-antitoxin", "ShosTA": "Toxin-antitoxin", "SanaTA": "Toxin-antitoxin",
+    "Anti_RM": "Anti-defense",
     "Gabija": "Abortive infection", "Druantia": "Abortive infection",
     "Hachiman": "Abortive infection", "Lamassu-Fam": "Abortive infection",
     "Lamassu": "Abortive infection", "PARIS": "Abortive infection",
@@ -162,12 +164,16 @@ def load_blast(results_dir: Path) -> list:
 
 
 def load_defensefinder(results_dir: Path) -> list:
-    """Load defense systems (one row per unique sys_id)."""
-    f = results_dir / "defensefinder" / "defense_finder_systems.tsv"
+    """Load defense genes from defense_finder_genes.tsv, deduplicated by hit_id.
+
+    Matches the counting method used by the figures script (defense_plots.py):
+    one entry per unique gene hit, using the genes TSV (not systems TSV).
+    """
+    f = results_dir / "defensefinder" / "defense_finder_genes.tsv"
     if not f.exists():
         return []
     rows = []
-    seen_sys = set()
+    seen_hits = set()
     with open(f) as fh:
         for line in fh:
             line = line.strip()
@@ -176,20 +182,21 @@ def load_defensefinder(results_dir: Path) -> list:
             parts = line.split("\t")
             if len(parts) < 6:
                 continue
-            model_fqn = parts[4] if len(parts) > 4 else ""
-            fqn_parts = model_fqn.split("/")
-            subtype = fqn_parts[-1] if fqn_parts else "Unknown"
-            system_type = fqn_parts[-2] if len(fqn_parts) >= 2 else subtype
-            sys_id = parts[5] if len(parts) > 5 else ""
-            if sys_id in seen_sys:
+            hit_id = parts[1] if len(parts) > 1 else ""
+            if hit_id == "hit_id" or hit_id in seen_hits:
                 continue
-            seen_sys.add(sys_id)
+            seen_hits.add(hit_id)
+            model_fqn   = parts[4] if len(parts) > 4 else ""
+            sys_id      = parts[5] if len(parts) > 5 else ""
+            fqn_parts   = model_fqn.split("/")
+            subtype     = fqn_parts[-1] if fqn_parts else "Unknown"
+            system_type = fqn_parts[-2] if len(fqn_parts) >= 2 else subtype
             rows.append({
-                "sys_id": sys_id,
-                "type": system_type,
-                "subtype": subtype,
+                "sys_id":   sys_id,
+                "type":     system_type,
+                "subtype":  subtype,
                 "category": _category(system_type, subtype),
-                "replicon": parts[0],
+                "replicon": hit_id,
             })
     return rows
 
@@ -339,11 +346,47 @@ def load_contig_orfs(results_dir: Path) -> list:
 
 
 def load_organism_names(results_dir: Path) -> dict:
-    """Parse genus from first FASTA header of each staged genome."""
-    genomes_dir = results_dir / "genomes"
+    """Return genome_id → genus mapping.
+
+    Priority:
+    1. genus_manifest.tsv saved alongside results (small, always transferable)
+    2. Scan genomes/ directory FASTA headers (only available if genomes were staged locally)
+    """
     organism_map = {}
+
+    # 1. Try compact manifest written by stage_genomes rule
+    manifest = results_dir / "genus_manifest.tsv"
+    if manifest.exists():
+        with open(manifest) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("genome_id"):
+                    continue
+                parts = line.split("\t")
+                if len(parts) >= 2:
+                    organism_map[parts[0]] = parts[1]
+        return organism_map
+
+    # 2. Fall back to scanning genome FASTA files
+    genomes_dir = results_dir / "genomes"
+    if not genomes_dir.exists():
+        # Try alternate layout where pipeline ran from a nested subdirectory
+        sample_name = results_dir.name
+        root = results_dir.parent.parent
+        try:
+            for sub in root.iterdir():
+                if not sub.is_dir():
+                    continue
+                alt = sub / "results" / sample_name / "genomes"
+                if alt.exists():
+                    genomes_dir = alt
+                    break
+        except PermissionError:
+            pass
+
     if not genomes_dir.exists():
         return organism_map
+
     for fna in genomes_dir.glob("*.fna"):
         genome_id = fna.stem
         try:
@@ -550,19 +593,18 @@ def chart_blast_hits_per_genome(blast: list) -> str:
 def chart_blast_table(blast: list, max_rows: int = 100) -> str:
     if not blast:
         return _no_data("No BLAST results available.")
-    # Sort by evalue ascending
     def sort_key(r):
         try:
-            return float(r.get("evalue", 9999))
+            return float(r.get("pident", 0))
         except ValueError:
-            return 9999
-    top = sorted(blast, key=sort_key)[:max_rows]
+            return 0.0
+    top = sorted(blast, key=sort_key, reverse=True)[:max_rows]
     cols = ["query_id", "subject_id", "pident", "length", "evalue", "genome"]
     return html_table(
         headers=["Query", "Subject", "% Identity", "Align. Len.", "E-value", "Genome"],
         rows=[[_esc(r.get(c, "")) for c in cols] for r in top],
         table_id="blast-table",
-        caption=f"Top {len(top)} BLAST hits (sorted by E-value)",
+        caption=f"Top {len(top)} BLAST hits (sorted by % identity, highest first)",
     )
 
 
@@ -653,9 +695,8 @@ def chart_defense_scores(scores: list) -> str:
             caption="Defense scores (first 100 rows)",
         )
 
-    sorted_scores = sorted(scores, key=parse_score, reverse=True)
-    top50    = sorted_scores[:50]
-    bottom50 = sorted_scores[-50:][::-1]   # lowest first → reversed so worst is at top
+    top50    = sorted(scores, key=parse_score, reverse=True)[:50]
+    bottom50 = sorted(scores, key=parse_score)[:50]
 
     display_cols = cols  # show all columns from the TSV
     headers = [_esc(c) for c in display_cols]
@@ -708,7 +749,7 @@ def chart_defense_categories(defense: list) -> str:
 def chart_defense_sunburst(defense: list) -> str:
     if not defense:
         return _no_data("No DefenseFinder results available.")
-    ct_counts = Counter((r["category"], r["type"]) for r in defense)
+    ct_counts = Counter((r["category"], r["subtype"]) for r in defense)
     cat_totals = Counter(r["category"] for r in defense)
     ids, parents, labels, values, colors = [], [], [], [], []
     for cat, total in cat_totals.items():
@@ -717,10 +758,10 @@ def chart_defense_sunburst(defense: list) -> str:
         labels.append(cat)
         values.append(total)
         colors.append(CATEGORY_COLORS.get(cat, TEAL[4]))
-    for (cat, typ), cnt in ct_counts.items():
-        ids.append(f"type:{cat}/{typ}")
+    for (cat, subtype), cnt in ct_counts.items():
+        ids.append(f"subtype:{cat}/{subtype}")
         parents.append(f"cat:{cat}")
-        labels.append(typ)
+        labels.append(subtype)
         values.append(cnt)
         colors.append(CATEGORY_COLORS.get(cat, TEAL[4]))
     fig = go.Figure(go.Sunburst(
@@ -732,7 +773,7 @@ def chart_defense_sunburst(defense: list) -> str:
     ))
     fig.update_layout(
         **_layout(margin=dict(t=50, b=10, l=10, r=10)),
-        title="Category × System Type (click to expand)",
+        title="Category × DefenseFinder Type (click to expand)",
         height=440,
     )
     return _fig_html(fig)
@@ -769,13 +810,13 @@ def chart_defense_top_types(defense: list) -> str:
 def chart_defense_table(defense: list) -> str:
     if not defense:
         return _no_data("No DefenseFinder results available.")
+    counts = Counter((r["type"], r["category"]) for r in defense)
+    rows = sorted(counts.items(), key=lambda x: -x[1])
     return html_table(
-        headers=["System ID", "Type", "Subtype", "Category"],
-        rows=[[_esc(r.get("sys_id", "")), _esc(r.get("type", "")),
-               _esc(r.get("subtype", "")), _esc(r.get("category", ""))]
-              for r in defense],
+        headers=["Type", "Category", "Count"],
+        rows=[[_esc(typ), _esc(cat), str(cnt)] for (typ, cat), cnt in rows],
         table_id="defense-table",
-        caption=f"{len(defense)} unique defense systems identified",
+        caption=f"{len(defense)} total systems across {len(rows)} unique types",
     )
 
 
@@ -1430,7 +1471,7 @@ def build_html(
         metric_card("Total Input",       fmt(metrics.get("total_input_mb"), 1) + " Mb", "sequenced"),
         metric_card("BLAST Hits",        fmt(metrics.get("blast_hits")),                "query matches"),
         metric_card("Hits per Mb",       fmt(metrics.get("hits_per_mb"), 3),            ""),
-        metric_card("Defense Systems",   fmt(metrics.get("defense_systems")),           "DefenseFinder"),
+        metric_card("Defense Genes",      fmt(len(defense)),                             "DefenseFinder"),
         metric_card("Contigs Analyzed",  fmt(metrics.get("contigs_analyzed")),          "flanking regions"),
         metric_card("Co-tx Pairs",       fmt(len(cotx)),                                ""),
         metric_card("IPS Annotations",   fmt(len(ips)),                                 "domain hits"),
